@@ -1,0 +1,9 @@
+node_modules
+dist
+.claude/
+__pycache__/
+*.pyc
+.env
+.env.*
+data/
+debug_output/
