@@ -458,7 +458,6 @@ def extract_answer_keys_from_pdf(pdf_bytes, filename):
                     "name": "submit_answer_key",
                     "description": "Submit the fully extracted answer key for the uploaded test.",
                     "input_schema": build_answer_key_schema(),
-                    "strict": True,
                 }
             ],
             tool_choice={"type": "tool", "name": "submit_answer_key"},
