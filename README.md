@@ -1,105 +1,96 @@
-# OMR Scorer — OpenCV ML Edition
+# scantron2
 
-Accurate ACT answer sheet scoring using computer vision.
-Works with phone camera photos — handles skew, glare, shadows.
+OMR upload app with:
 
-## Setup (2 minutes)
+- a React frontend for students and admins
+- a FastAPI backend for preprocessing, splitting, and shared test storage
+- AI-assisted PDF answer-key extraction for admin uploads
+
+## Repo layout
+
+```text
+scantron2/
+├── App.jsx               # Frontend app shell
+├── src/main.jsx          # React entry point
+├── package.json          # Frontend dependencies
+├── backend/
+│   ├── app.py            # FastAPI backend
+│   ├── requirements.txt  # Backend dependencies
+│   └── data/             # SQLite database (ignored)
+├── static/               # Legacy local assets
+├── templates/            # Legacy OMR templates
+├── fixed_template_engine.py
+├── omr_engine.py
+└── diagnose.py
+```
+
+## Local frontend
 
 ```bash
-# 1. Install Python 3.9+, then:
+npm install
+npm run dev
+```
+
+Frontend env vars:
+
+```text
+VITE_BACKEND_BASE_URL=http://localhost:5000
+VITE_PARSE_API_URL=https://rmrs.app.n8n.cloud/webhook/omr-upload
+```
+
+## Local backend
+
+```bash
+cd backend
 pip install -r requirements.txt
-
-# 2. Run the server
-python app.py
-
-# 3. Open browser
-# http://localhost:5000
+uvicorn app:app --reload --host 0.0.0.0 --port 5000
 ```
 
-## How it works
+Backend env vars:
 
-```
-Phone photo
-    ↓
-Load & resize to 2200px height
-    ↓
-Perspective correction (deskew) — fixes camera angle up to ~15°
-    ↓
-CLAHE contrast equalization — fixes uneven lighting & shadows
-    ↓
-Adaptive threshold — converts to black/white per local region
-    ↓
-Morphological cleanup — removes noise
-    ↓
-Hough Circle Transform — finds all bubble positions
-    ↓
-Fill ratio classification — measures darkness of each bubble
-    ↓
-Grid grouping — maps circles to Q×Option grid
-    ↓
-Scoring — compares detected answers to key
-    ↓
-Results + confidence + CSV export
+```text
+ANTHROPIC_API_KEY=...
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=omr123
+ANSWER_KEY_EXTRACTION_MODEL=claude-sonnet-4-20250514
+CORS_ALLOW_ORIGINS=http://localhost:5173
 ```
 
-## Tips for best accuracy
+## Deploy
 
-| Condition | Recommendation |
-|-----------|----------------|
-| Lighting  | Natural daylight or overhead lamp. Avoid flash. |
-| Angle     | Straight down. Up to ~15° tilt is auto-corrected. |
-| Distance  | Sheet fills the frame. Bubbles clearly visible. |
-| Blur      | Hold steady. Motion blur hurts accuracy. |
-| Erasures  | Dark erasures may be detected as filled — check flagged items. |
+### Netlify
 
-## Files
+Deploy the repo root as the frontend.
 
-```
-omr/
-├── app.py           # Flask server
-├── omr_engine.py    # OpenCV pipeline
-├── requirements.txt
-├── static/
-│   └── index.html   # Frontend
-└── debug_output/    # Created on first run — shows CV detections
-    ├── binary.jpg
-    ├── deskewed.jpg
-    └── debug_*.jpg  # Per-test detection overlay
+Set:
+
+```text
+VITE_BACKEND_BASE_URL=https://your-backend.up.railway.app
+VITE_PARSE_API_URL=https://rmrs.app.n8n.cloud/webhook/omr-upload
 ```
 
-## Deploy to client
+### Railway
 
-**Local network (easiest):**
+Deploy the `backend/` folder as the service root.
+
+Start command:
+
 ```bash
-# Run on your machine, share IP with client on same WiFi
-python app.py --host 0.0.0.0
-# Client opens: http://YOUR_IP:5000
+uvicorn app:app --host 0.0.0.0 --port $PORT
 ```
 
-**Cloud (Railway/Render):**
-```bash
-# Add Procfile:
-echo "web: python app.py" > Procfile
-# Push to GitHub → connect to Railway → deploy
+Recommended Railway vars:
+
+```text
+ANTHROPIC_API_KEY=...
+ADMIN_USERNAME=...
+ADMIN_PASSWORD=...
+ANSWER_KEY_EXTRACTION_MODEL=claude-sonnet-4-20250514
+CORS_ALLOW_ORIGINS=https://your-netlify-site.netlify.app
 ```
 
-## Tuning accuracy
+Mount a persistent volume at:
 
-In `omr_engine.py`, adjust these if detection is off:
-
-```python
-# is_filled() — lower = more sensitive (catches lightly filled bubbles)
-threshold = 0.42   # default: 0.42 (42% of bubble must be dark)
-
-# find_bubble_grid() — tune for your sheet's bubble size
-minRadius = 6      # minimum bubble radius in pixels
-maxRadius = 18     # maximum bubble radius in pixels
-minDist = 14       # minimum distance between bubble centers
+```text
+/app/data
 ```
-
-## Debug images
-
-After scoring, click "Debug images" in the UI to see:
-- `binary.jpg` — thresholded image (what OpenCV sees)
-- `deskewed.jpg` — perspective-corrected image  
-- `debug_English.jpg` — detected bubbles overlaid (green=correct, red=wrong, yellow=detected/no key)
