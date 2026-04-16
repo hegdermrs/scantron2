@@ -399,11 +399,9 @@ def normalize_answer_keys(payload):
 
 
 def build_answer_key_schema():
-    def section_schema(question_count):
+    def section_schema():
         return {
             "type": "array",
-            "minItems": question_count,
-            "maxItems": question_count,
             "items": {
                 "type": "string",
                 "enum": ["1", "2", "3", "4", "null"],
@@ -414,10 +412,10 @@ def build_answer_key_schema():
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            "english": section_schema(SECTION_CONFIG["english"]),
-            "math": section_schema(SECTION_CONFIG["math"]),
-            "reading": section_schema(SECTION_CONFIG["reading"]),
-            "science": section_schema(SECTION_CONFIG["science"]),
+            "english": section_schema(),
+            "math": section_schema(),
+            "reading": section_schema(),
+            "science": section_schema(),
             "summary": {"type": "string"},
         },
         "required": ["english", "math", "reading", "science", "summary"],
