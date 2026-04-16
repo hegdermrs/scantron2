@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
+import httpx
 import numpy as np
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -41,6 +42,9 @@ ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "omr123")
 ANTHROPIC_MODEL = os.getenv(
     "ANSWER_KEY_EXTRACTION_MODEL", "claude-sonnet-4-20250514"
+)
+PARSE_WEBHOOK_URL = os.getenv(
+    "PARSE_WEBHOOK_URL", "https://rmrs.app.n8n.cloud/webhook/omr-upload"
 )
 
 app = FastAPI(title="OMR Pipeline")
@@ -624,6 +628,61 @@ async def import_test_from_pdf(
         extraction_summary=extraction_summary,
     )
     return {"test": created_test}
+
+
+@app.post("/parse-omr")
+async def parse_omr_route(
+    file: UploadFile = File(...),
+    testId: str | None = Form(default=None),
+    testName: str | None = Form(default=None),
+):
+    file_bytes = await file.read()
+    if not file_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded OMR image is empty.")
+
+    form_data = {}
+    if testId:
+        form_data["testId"] = testId
+    if testName:
+        form_data["testName"] = testName
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.post(
+                PARSE_WEBHOOK_URL,
+                data=form_data,
+                files={
+                    "file": (
+                        file.filename or "omr-upload.jpg",
+                        file_bytes,
+                        file.content_type or "application/octet-stream",
+                    )
+                },
+            )
+    except httpx.HTTPError as exc:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Could not reach the parse webhook: {exc}",
+        ) from exc
+
+    content_type = response.headers.get("content-type", "")
+    if not response.is_success:
+        detail = f"Parse webhook failed with status {response.status_code}"
+        if "application/json" in content_type:
+            try:
+                payload = response.json()
+                detail = payload.get("detail") or payload.get("error") or detail
+            except ValueError:
+                pass
+        raise HTTPException(status_code=502, detail=detail)
+
+    if "application/json" in content_type:
+        return response.json()
+
+    raise HTTPException(
+        status_code=502,
+        detail="Parse webhook returned a non-JSON response.",
+    )
 
 
 @app.post("/split-omr")

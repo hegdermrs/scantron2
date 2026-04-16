@@ -3,9 +3,6 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 const BACKEND_BASE_URL = (
   import.meta.env.VITE_BACKEND_BASE_URL || "http://localhost:5000"
 ).replace(/\/$/, "");
-const PARSE_API_URL =
-  import.meta.env.VITE_PARSE_API_URL ||
-  "https://rmrs.app.n8n.cloud/webhook/omr-upload";
 const TESTS_ENDPOINT = `${BACKEND_BASE_URL}/tests`;
 const ADMIN_TESTS_ENDPOINT = `${BACKEND_BASE_URL}/admin/tests`;
 const ADMIN_IMPORT_ENDPOINT = `${BACKEND_BASE_URL}/admin/tests/import-pdf`;
@@ -23,7 +20,7 @@ const API_ENDPOINTS = {
   },
   parse: {
     label: "Parse Answers",
-    url: PARSE_API_URL,
+    url: `${BACKEND_BASE_URL}/parse-omr`,
     successMessage: "Answer parsing completed.",
   },
 };
