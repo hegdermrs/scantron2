@@ -1,4 +1,11 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
+
+import {
+  matchesPracticeTest1,
+  PRACTICE_TEST_1_SCORING,
+  scorePracticeTest1,
+} from "./actPracticeTest1Scoring.js";
+import { generateRecommendations } from "./studyRecommendations.js";
 
 const BACKEND_BASE_URL = (
   import.meta.env.VITE_BACKEND_BASE_URL || "http://localhost:5000"
@@ -384,6 +391,166 @@ const styles = `
     gap: 10px;
   }
 
+  .score-summary {
+    display: grid;
+    gap: 14px;
+    padding: 16px;
+    border-radius: 18px;
+    background: rgba(31, 111, 95, 0.08);
+    border: 1px solid rgba(31, 111, 95, 0.14);
+  }
+
+  .score-overview {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .score-pill,
+  .score-category-card {
+    border-radius: 16px;
+    padding: 12px 14px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid rgba(59, 48, 36, 0.08);
+  }
+
+  .score-label,
+  .score-category-name {
+    color: var(--muted);
+    font-size: 0.82rem;
+    line-height: 1.4;
+  }
+
+  .score-value,
+  .score-category-value {
+    margin-top: 4px;
+    font-size: 1.05rem;
+    font-weight: 800;
+    color: var(--filled);
+  }
+
+  .score-category-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 10px;
+  }
+
+  .results-banner {
+    grid-column: 1 / -1;
+  }
+
+  .study-plan-shell {
+    display: grid;
+    gap: 18px;
+  }
+
+  .study-plan-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 18px;
+  }
+
+  .study-plan-card {
+    display: grid;
+    gap: 16px;
+  }
+
+  .study-plan-header {
+    display: grid;
+    gap: 6px;
+  }
+
+  .study-plan-copy {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.93rem;
+    line-height: 1.5;
+  }
+
+  .study-category-list,
+  .study-strategy-list,
+  .study-module-list {
+    display: grid;
+    gap: 10px;
+  }
+
+  .study-category-card,
+  .study-strategy-card,
+  .study-module-card {
+    border-radius: 18px;
+    border: 1px solid rgba(59, 48, 36, 0.08);
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .study-category-card {
+    padding: 14px;
+    display: grid;
+    gap: 12px;
+  }
+
+  .study-category-head,
+  .study-module-head {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .study-category-title,
+  .study-module-title {
+    margin: 0;
+    font-size: 0.96rem;
+  }
+
+  .study-category-score,
+  .study-module-subtitle {
+    color: var(--muted);
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  .study-category-reason {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+    line-height: 1.55;
+  }
+
+  .study-module-card,
+  .study-strategy-card {
+    padding: 12px 14px;
+  }
+
+  .study-priority {
+    padding: 7px 10px;
+    border-radius: 999px;
+    font-size: 0.76rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+
+  .study-priority.high {
+    background: rgba(182, 71, 71, 0.12);
+    color: var(--danger);
+  }
+
+  .study-priority.medium {
+    background: rgba(158, 113, 54, 0.14);
+    color: #8b5a1f;
+  }
+
+  .study-priority.low {
+    background: rgba(31, 111, 95, 0.12);
+    color: var(--accent);
+  }
+
+  .study-strategy-title {
+    margin: 0;
+    font-size: 0.92rem;
+  }
+
   .answer-card {
     border-radius: 18px;
     padding: 12px;
@@ -587,7 +754,8 @@ const styles = `
   @media (max-width: 980px) {
     .hero-grid,
     .results-grid,
-    .admin-grid {
+    .admin-grid,
+    .study-plan-grid {
       grid-template-columns: 1fr;
     }
   }
@@ -660,6 +828,31 @@ function formatSavedDate(isoDate) {
   } catch {
     return isoDate;
   }
+}
+
+function getDisplayedCategoryScores(sectionKey, sectionScore) {
+  const config = PRACTICE_TEST_1_SCORING[sectionKey];
+  if (!config || !sectionScore) {
+    return [];
+  }
+
+  return config.categoryOrder
+    .map((categoryCode) => {
+      const sourceScore = config.groupedCategories[categoryCode]
+        ? sectionScore.groupedCategoryScores[categoryCode]
+        : sectionScore.categoryScores[categoryCode];
+
+      if (!sourceScore) {
+        return null;
+      }
+
+      return {
+        code: categoryCode,
+        label: config.categoryDisplayNames[categoryCode] || categoryCode,
+        ...sourceScore,
+      };
+    })
+    .filter(Boolean);
 }
 
 async function readApiResponse(response) {
@@ -742,10 +935,16 @@ export default function App() {
   const [adminError, setAdminError] = useState("");
   const [adminSuccess, setAdminSuccess] = useState("");
   const [testName, setTestName] = useState("");
-  const [answerKeyFile, setAnswerKeyFile] = useState(null);
+  const [scoringRubricFile, setScoringRubricFile] = useState(null);
+  const [recommendationFiles, setRecommendationFiles] = useState({
+    english: null,
+    math: null,
+    reading: null,
+    science: null,
+  });
   const [savedTests, setSavedTests] = useState([]);
   const [isSavingTest, setIsSavingTest] = useState(false);
-  const answerKeyInputRef = useRef(null);
+  const [adminUploadResetKey, setAdminUploadResetKey] = useState(0);
 
   const selectedTest = useMemo(
     () =>
@@ -753,6 +952,42 @@ export default function App() {
       null,
     [availableTests, selectedTestId]
   );
+  const practiceTest1ScoringState = useMemo(() => {
+    const practiceTestReference = `${selectedTest?.name || ""} ${
+      selectedTest?.sourceFilename || ""
+    }`;
+    const isPracticeTest1 = matchesPracticeTest1(practiceTestReference);
+
+    if (!results || !isPracticeTest1) {
+      return {
+        isPracticeTest1,
+        scores: null,
+        error: "",
+      };
+    }
+
+    try {
+      return {
+        isPracticeTest1,
+        scores: scorePracticeTest1(results),
+        error: "",
+      };
+    } catch (scoringError) {
+      return {
+        isPracticeTest1,
+        scores: null,
+        error:
+          scoringError.message || "Practice Test 1 scoring could not be computed.",
+      };
+    }
+  }, [results, selectedTest]);
+  const studyRecommendations = useMemo(() => {
+    if (!practiceTest1ScoringState.scores) {
+      return null;
+    }
+
+    return generateRecommendations(practiceTest1ScoringState.scores);
+  }, [practiceTest1ScoringState.scores]);
 
   const loadPublicTests = async () => {
     setTestsLoading(true);
@@ -885,6 +1120,13 @@ export default function App() {
     }));
   };
 
+  const handleRecommendationFileChange = (sectionKey, file) => {
+    setRecommendationFiles((current) => ({
+      ...current,
+      [sectionKey]: file,
+    }));
+  };
+
   const handleAdminLogin = async (event) => {
     event.preventDefault();
     setAdminError("");
@@ -911,8 +1153,20 @@ export default function App() {
       return;
     }
 
-    if (!answerKeyFile) {
-      setAdminError("Upload a PDF that contains the answer key.");
+    if (!scoringRubricFile) {
+      setAdminError("Upload the scoring rubric PDF before saving.");
+      return;
+    }
+
+    const missingRecommendationSections = SECTION_CONFIG.filter(
+      ({ key }) => !recommendationFiles[key]
+    );
+    if (missingRecommendationSections.length) {
+      setAdminError(
+        `Upload recommendation PDFs for ${missingRecommendationSections
+          .map(({ title }) => title)
+          .join(", ")} before saving.`
+      );
       return;
     }
 
@@ -921,7 +1175,13 @@ export default function App() {
     try {
       const formData = new FormData();
       formData.append("name", testName.trim());
-      formData.append("file", answerKeyFile);
+      formData.append("scoringRubricFile", scoringRubricFile);
+      SECTION_CONFIG.forEach(({ key }) => {
+        const fieldName = `${key}RecommendationFile`;
+        if (recommendationFiles[key]) {
+          formData.append(fieldName, recommendationFiles[key]);
+        }
+      });
 
       const authHeader = buildBasicAuthHeader(
         adminCredentials.username.trim(),
@@ -938,11 +1198,14 @@ export default function App() {
 
       const createdTest = payload.test || null;
       setTestName("");
-      setAnswerKeyFile(null);
-
-      if (answerKeyInputRef.current) {
-        answerKeyInputRef.current.value = "";
-      }
+      setScoringRubricFile(null);
+      setRecommendationFiles({
+        english: null,
+        math: null,
+        reading: null,
+        science: null,
+      });
+      setAdminUploadResetKey((current) => current + 1);
 
       await loadPublicTests();
       await loadAdminTests(adminCredentials);
@@ -953,11 +1216,13 @@ export default function App() {
 
       setAdminSuccess(
         createdTest?.extractionSummary
-          ? `Saved test. ${createdTest.extractionSummary}`
-          : "Saved test and extracted answer keys."
+          ? `Saved test package. ${createdTest.extractionSummary}`
+          : "Saved test package and extracted rubric plus recommendation configs."
       );
     } catch (saveError) {
-      setAdminError(saveError.message || "Could not import the answer key PDF.");
+      setAdminError(
+        saveError.message || "Could not create the test package from the uploaded PDFs."
+      );
     } finally {
       setIsSavingTest(false);
     }
@@ -1158,50 +1423,201 @@ export default function App() {
         </section>
 
         {results ? (
-          <section className="results-grid">
-            {SECTION_CONFIG.map(({ key, title, total }) => {
-              const answers = Array.isArray(results[key]) ? results[key] : [];
-              const counts = countAnswers(answers);
+          <>
+            <section className="results-grid">
+              {practiceTest1ScoringState.error ? (
+                <div className="message error results-banner">
+                  {practiceTest1ScoringState.error}
+                </div>
+              ) : null}
 
-              return (
-                <article key={key} className="result-card">
-                  <div className="result-head">
-                    <div>
-                      <h3 className="result-title">{title}</h3>
-                      <div className="result-meta">
-                        {counts.answered} answered / {counts.blank} blank
-                      </div>
-                    </div>
-                    <span className="status-chip">
-                      {answers.length || total} questions
-                    </span>
-                  </div>
+              {SECTION_CONFIG.map(({ key, title, total }) => {
+                const answers = Array.isArray(results[key]) ? results[key] : [];
+                const counts = countAnswers(answers);
+                const sectionScore = practiceTest1ScoringState.scores?.[key] || null;
+                const categoryScores = getDisplayedCategoryScores(key, sectionScore);
 
-                  <div className="answers-grid">
-                    {answers.map((value, index) => {
-                      const questionNumber = index + 1;
-                      const mappedAnswer = mapAnswer(value, questionNumber);
-                      const isBlank = mappedAnswer === "-";
-
-                      return (
-                        <div
-                          key={`${key}-${questionNumber}`}
-                          className={`answer-card ${
-                            isBlank ? "blank" : "filled"
-                          }`}
-                        >
-                          <div className="answer-question">
-                            Q{questionNumber}
-                          </div>
-                          <div className="answer-value">{mappedAnswer}</div>
+                return (
+                  <article key={key} className="result-card">
+                    <div className="result-head">
+                      <div>
+                        <h3 className="result-title">{title}</h3>
+                        <div className="result-meta">
+                          {counts.answered} answered / {counts.blank} blank
                         </div>
-                      );
-                    })}
+                      </div>
+                      <span className="status-chip">
+                        {answers.length || total} questions
+                      </span>
+                    </div>
+
+                    {sectionScore ? (
+                      <div className="score-summary">
+                        <div className="score-overview">
+                          <div className="score-pill">
+                            <div className="score-label">Raw score</div>
+                            <div className="score-value">
+                              {sectionScore.rawScore} / {sectionScore.totalPossible}
+                            </div>
+                          </div>
+
+                          <div className="score-pill">
+                            <div className="score-label">Scale score</div>
+                            <div className="score-value">{sectionScore.scaleScore}</div>
+                          </div>
+                        </div>
+
+                        <div className="score-category-grid">
+                          {categoryScores.map((categoryScore) => (
+                            <div
+                              key={`${key}-${categoryScore.code}`}
+                              className="score-category-card"
+                            >
+                              <div className="score-category-name">
+                                {categoryScore.label}
+                              </div>
+                              <div className="score-category-value">
+                                {categoryScore.correct} / {categoryScore.total}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    <div className="answers-grid">
+                      {answers.map((value, index) => {
+                        const questionNumber = index + 1;
+                        const mappedAnswer = mapAnswer(value, questionNumber);
+                        const isBlank = mappedAnswer === "-";
+
+                        return (
+                          <div
+                            key={`${key}-${questionNumber}`}
+                            className={`answer-card ${
+                              isBlank ? "blank" : "filled"
+                            }`}
+                          >
+                            <div className="answer-question">
+                              Q{questionNumber}
+                            </div>
+                            <div className="answer-value">{mappedAnswer}</div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </article>
+                );
+              })}
+            </section>
+
+            {studyRecommendations ? (
+              <section className="study-plan-shell">
+                <div className="panel-card">
+                  <div className="study-plan-header">
+                    <h2 className="panel-title">Recommended Study Plan</h2>
+                    <p className="study-plan-copy">
+                      Based on the category scores already computed above, these
+                      Prepmedians modules prioritize weaker areas first and keep
+                      stronger categories compact.
+                    </p>
                   </div>
-                </article>
-              );
-            })}
-          </section>
+                </div>
+
+                <div className="study-plan-grid">
+                  {SECTION_CONFIG.map(({ key, title }) => {
+                    const sectionPlan = studyRecommendations[key];
+                    if (!sectionPlan) {
+                      return null;
+                    }
+
+                    return (
+                      <article key={`study-${key}`} className="result-card study-plan-card">
+                        <div className="result-head">
+                          <div>
+                            <h3 className="result-title">{title}</h3>
+                            <div className="result-meta">
+                              Personalized category recommendations
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="study-category-list">
+                          {sectionPlan.categories.map((category) => (
+                            <div
+                              key={`${key}-${category.code}-recommendation`}
+                              className="study-category-card"
+                            >
+                              <div className="study-category-head">
+                                <div>
+                                  <h4 className="study-category-title">
+                                    {category.label}
+                                  </h4>
+                                  <div className="study-category-score">
+                                    {category.score.correct} / {category.score.total}
+                                  </div>
+                                </div>
+
+                                {category.isFocusArea ? (
+                                  <span className="study-priority high">
+                                    Focus Area
+                                  </span>
+                                ) : (
+                                  <span className={`study-priority ${category.priority}`}>
+                                    {category.priority} priority
+                                  </span>
+                                )}
+                              </div>
+
+                              <p className="study-category-reason">{category.reason}</p>
+
+                              <div className="study-module-list">
+                                {category.recommendations.map((item) => (
+                                  <div key={item.id} className="study-module-card">
+                                    <div className="study-module-head">
+                                      <div>
+                                        <h5 className="study-module-title">
+                                          {item.title}
+                                        </h5>
+                                        {item.subtitle ? (
+                                          <div className="study-module-subtitle">
+                                            {item.subtitle}
+                                          </div>
+                                        ) : null}
+                                      </div>
+                                      <span
+                                        className={`study-priority ${item.priority}`}
+                                      >
+                                        {item.priority}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="study-strategy-list">
+                          <div className="score-category-name">Section strategy</div>
+                          {sectionPlan.strategy.map((item) => (
+                            <div key={item.id} className="study-strategy-card">
+                              <h4 className="study-strategy-title">{item.title}</h4>
+                              {item.subtitle ? (
+                                <div className="study-module-subtitle">
+                                  {item.subtitle}
+                                </div>
+                              ) : null}
+                            </div>
+                          ))}
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
+          </>
         ) : null}
 
         {apiPreview ? (
@@ -1248,8 +1664,8 @@ export default function App() {
                 <div>
                   <h2 className="panel-title">Admin Panel</h2>
                   <p className="panel-subtitle">
-                    Upload a PDF answer key, let AI extract the answers, and
-                    publish the test to the server.
+                    Create a full test package by uploading one scoring rubric
+                    PDF and four subject recommendation PDFs.
                   </p>
                 </div>
                 <span className="status-chip">
@@ -1318,21 +1734,52 @@ export default function App() {
                   </div>
 
                   <div className="field">
-                    <label htmlFor="answer-key-upload">Answer key PDF</label>
+                    <label htmlFor="scoring-rubric-upload">Scoring rubric PDF</label>
                     <input
-                      ref={answerKeyInputRef}
-                      id="answer-key-upload"
+                      key={`scoring-rubric-${adminUploadResetKey}`}
+                      id="scoring-rubric-upload"
                       className="file-input"
                       type="file"
                       accept=".pdf,application/pdf"
                       onChange={(event) =>
-                        setAnswerKeyFile(event.target.files?.[0] || null)
+                        setScoringRubricFile(event.target.files?.[0] || null)
                       }
                     />
                     <div className="file-name">
-                      {answerKeyFile
-                        ? answerKeyFile.name
-                        : "No answer key PDF selected"}
+                      {scoringRubricFile
+                        ? scoringRubricFile.name
+                        : "No scoring rubric PDF selected"}
+                    </div>
+                  </div>
+
+                  <div className="field">
+                    <label>Recommendation PDFs</label>
+                    <div className="stack">
+                      {SECTION_CONFIG.map(({ key, title }) => (
+                        <div key={`recommendation-${key}`} className="field">
+                          <label htmlFor={`${key}-recommendation-upload`}>
+                            {title} recommendations
+                          </label>
+                          <input
+                            key={`${key}-recommendation-${adminUploadResetKey}`}
+                            id={`${key}-recommendation-upload`}
+                            className="file-input"
+                            type="file"
+                            accept=".pdf,application/pdf"
+                            onChange={(event) =>
+                              handleRecommendationFileChange(
+                                key,
+                                event.target.files?.[0] || null
+                              )
+                            }
+                          />
+                          <div className="file-name">
+                            {recommendationFiles[key]
+                              ? recommendationFiles[key].name
+                              : `No ${title.toLowerCase()} recommendation PDF selected`}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
 
@@ -1349,13 +1796,14 @@ export default function App() {
                       className="primary-button"
                       disabled={isSavingTest}
                     >
-                      {isSavingTest ? "Extracting + Saving..." : "Import PDF Test"}
+                      {isSavingTest ? "Building Test Package..." : "Create Test Package"}
                     </button>
                   </div>
 
                   <p className="helper-text">
-                    The backend stores tests on the server so every student can
-                    see them in the shared selector.
+                    Upload one scoring rubric plus four subject recommendation
+                    PDFs. The backend extracts structured configs and stores the
+                    finished test package on the server.
                   </p>
                 </form>
               )}
@@ -1386,9 +1834,19 @@ export default function App() {
                       </div>
 
                       <div className="helper-text">
-                        Source: {test.sourceFilename || "Manual import"}
+                        Rubric: {test.sourceFilename || "Manual import"} | Status:{" "}
+                        {test.configStatus || "legacy"}
                         {test.extractionSummary ? ` | ${test.extractionSummary}` : ""}
                       </div>
+
+                      {Object.keys(test.recommendationFilenames || {}).length ? (
+                        <div className="helper-text">
+                          Recommendation PDFs:{" "}
+                          {Object.entries(test.recommendationFilenames)
+                            .map(([sectionKey, filename]) => `${sectionKey}: ${filename}`)
+                            .join(" | ")}
+                        </div>
+                      ) : null}
 
                       <div className="saved-test-sections">
                         {SECTION_CONFIG.map(({ key, title }) => {
@@ -1413,6 +1871,10 @@ export default function App() {
                         <div className="saved-test-date">
                           {formatSavedDate(test.createdAt)}
                         </div>
+                      </div>
+
+                      <div className="helper-text">
+                        Status: {test.configStatus || "legacy"}
                       </div>
 
                       <div className="saved-test-sections">

@@ -89,6 +89,21 @@ def ensure_data_store():
             )
             """
         )
+        existing_columns = {
+            row[1] for row in connection.execute("PRAGMA table_info(tests)").fetchall()
+        }
+        required_columns = {
+            "scoring_config_json": "TEXT",
+            "recommendation_config_json": "TEXT",
+            "recommendation_filenames_json": "TEXT",
+            "config_status": "TEXT",
+        }
+
+        for column_name, column_type in required_columns.items():
+            if column_name not in existing_columns:
+                connection.execute(
+                    f"ALTER TABLE tests ADD COLUMN {column_name} {column_type}"
+                )
         connection.commit()
 
 
@@ -398,36 +413,155 @@ def normalize_answer_keys(payload):
     return normalized
 
 
-def build_answer_key_schema():
+def build_module_schema():
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "id": {"type": "string"},
+            "title": {"type": "string"},
+            "subtitle": {"type": "string"},
+            "topic": {"type": "string"},
+            "reason": {"type": "string"},
+            "priority": {"type": "string"},
+        },
+        "required": ["id", "title"],
+    }
+
+
+def build_scoring_schema():
     def section_schema():
         return {
-            "type": "array",
-            "items": {
-                "type": "string",
-                "enum": ["1", "2", "3", "4", "null"],
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "title": {"type": "string"},
+                "totalQuestions": {"type": "integer"},
+                "totalPossible": {"type": "integer"},
+                "notScored": {"type": "array", "items": {"type": "integer"}},
+                "answerKey": {"type": "array", "items": {"type": "string"}},
+                "categoryByQuestion": {"type": "array", "items": {"type": "string"}},
+                "categoryDisplayNames": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "code": {"type": "string"},
+                            "label": {"type": "string"},
+                        },
+                        "required": ["code", "label"],
+                    },
+                },
+                "categoryOrder": {"type": "array", "items": {"type": "string"}},
+                "groupedCategories": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "code": {"type": "string"},
+                            "label": {"type": "string"},
+                            "members": {"type": "array", "items": {"type": "string"}},
+                        },
+                        "required": ["code", "members"],
+                    },
+                },
+                "rawToScale": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "additionalProperties": False,
+                        "properties": {
+                            "raw": {"type": "integer"},
+                            "scale": {"type": "integer"},
+                        },
+                        "required": ["raw", "scale"],
+                    },
+                },
             },
+            "required": [
+                "title",
+                "totalQuestions",
+                "totalPossible",
+                "notScored",
+                "answerKey",
+                "categoryByQuestion",
+                "categoryDisplayNames",
+                "categoryOrder",
+                "groupedCategories",
+                "rawToScale",
+            ],
         }
 
     return {
         "type": "object",
         "additionalProperties": False,
         "properties": {
-            "english": section_schema(),
-            "math": section_schema(),
-            "reading": section_schema(),
-            "science": section_schema(),
+            "profileId": {"type": "string"},
             "summary": {"type": "string"},
+            "sections": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "english": section_schema(),
+                    "math": section_schema(),
+                    "reading": section_schema(),
+                    "science": section_schema(),
+                },
+                "required": ["english", "math", "reading", "science"],
+            },
         },
-        "required": ["english", "math", "reading", "science", "summary"],
+        "required": ["profileId", "summary", "sections"],
     }
 
 
-def extract_answer_keys_from_pdf(pdf_bytes, filename):
+def build_recommendation_section_schema():
+    return {
+        "type": "object",
+        "additionalProperties": False,
+        "properties": {
+            "section": {"type": "string"},
+            "summary": {"type": "string"},
+            "strategy": {"type": "array", "items": build_module_schema()},
+            "categories": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": False,
+                    "properties": {
+                        "code": {"type": "string"},
+                        "label": {"type": "string"},
+                        "bands": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "additionalProperties": False,
+                                "properties": {
+                                    "minScore": {"type": "integer"},
+                                    "maxScore": {"type": "integer"},
+                                    "priority": {"type": "string"},
+                                    "reason": {"type": "string"},
+                                    "items": {"type": "array", "items": build_module_schema()},
+                                },
+                                "required": ["items"],
+                            },
+                        },
+                    },
+                    "required": ["code", "label", "bands"],
+                },
+            },
+        },
+        "required": ["section", "summary", "strategy", "categories"],
+    }
+
+
+def get_anthropic_client():
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise HTTPException(
             status_code=500,
-            detail="ANTHROPIC_API_KEY is not configured for PDF answer key extraction.",
+            detail="ANTHROPIC_API_KEY is not configured for PDF extraction.",
         )
 
     try:
@@ -435,19 +569,15 @@ def extract_answer_keys_from_pdf(pdf_bytes, filename):
     except ImportError as exc:
         raise HTTPException(
             status_code=500,
-            detail="The anthropic package is required for PDF answer key extraction.",
+            detail="The anthropic package is required for PDF extraction.",
         ) from exc
 
-    client = anthropic.Anthropic(api_key=api_key)
+    return anthropic.Anthropic(api_key=api_key)
+
+
+def extract_pdf_tool_payload(pdf_bytes, prompt, tool_name, input_schema):
+    client = get_anthropic_client()
     pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
-    extraction_prompt = (
-        "You are extracting answer keys from an uploaded test-answer-key PDF. "
-        "Return only the official answer key values for the sections english (50), math (45), "
-        "reading (36), and science (40). Convert A or F to 1, B or G to 2, C or H to 3, "
-        "D or J to 4. If a question has no answer or is unreadable, return the string 'null'. "
-        "Do not skip questions. Keep the answers in order. Also provide a short summary of what "
-        "you extracted or any ambiguity you noticed. You must call the provided tool."
-    )
 
     try:
         response = client.messages.create(
@@ -455,12 +585,12 @@ def extract_answer_keys_from_pdf(pdf_bytes, filename):
             max_tokens=4096,
             tools=[
                 {
-                    "name": "submit_answer_key",
-                    "description": "Submit the fully extracted answer key for the uploaded test.",
-                    "input_schema": build_answer_key_schema(),
+                    "name": tool_name,
+                    "description": "Return the extracted structured data for the uploaded PDF.",
+                    "input_schema": input_schema,
                 }
             ],
-            tool_choice={"type": "tool", "name": "submit_answer_key"},
+            tool_choice={"type": "tool", "name": tool_name},
             messages=[
                 {
                     "role": "user",
@@ -475,7 +605,7 @@ def extract_answer_keys_from_pdf(pdf_bytes, filename):
                         },
                         {
                             "type": "text",
-                            "text": extraction_prompt,
+                            "text": prompt,
                         },
                     ],
                 }
@@ -494,13 +624,255 @@ def extract_answer_keys_from_pdf(pdf_bytes, filename):
     if tool_block is None:
         raise HTTPException(
             status_code=502,
-            detail="Claude did not return the answer-key tool payload.",
+            detail="Claude did not return the expected tool payload.",
         )
 
-    extracted = dict(tool_block.input)
+    return dict(tool_block.input)
 
-    normalized_keys = normalize_answer_keys(extracted)
-    return normalized_keys, extracted.get("summary", "")
+
+def normalize_scoring_section(section_name, raw_section):
+    if not isinstance(raw_section, dict):
+        raise ValueError(f"Section '{section_name}' must be an object")
+
+    expected_total_questions = SECTION_CONFIG[section_name]
+    total_questions = int(raw_section.get("totalQuestions") or expected_total_questions)
+    if total_questions != expected_total_questions:
+        raise ValueError(
+            f"Section '{section_name}' must contain {expected_total_questions} questions"
+        )
+
+    raw_answer_key = raw_section.get("answerKey")
+    if not isinstance(raw_answer_key, list) or len(raw_answer_key) != total_questions:
+        raise ValueError(
+            f"Section '{section_name}' answerKey must contain {total_questions} entries"
+        )
+
+    raw_category_by_question = raw_section.get("categoryByQuestion")
+    if (
+        not isinstance(raw_category_by_question, list)
+        or len(raw_category_by_question) != total_questions
+    ):
+        raise ValueError(
+            f"Section '{section_name}' categoryByQuestion must contain {total_questions} entries"
+        )
+
+    not_scored = sorted({int(value) for value in raw_section.get("notScored", [])})
+    category_display_names = {
+        str(item["code"]).strip(): str(item["label"]).strip()
+        for item in raw_section.get("categoryDisplayNames", [])
+        if isinstance(item, dict) and str(item.get("code", "")).strip()
+    }
+    grouped_categories = {
+        str(item["code"]).strip(): [
+            str(member).strip()
+            for member in item.get("members", [])
+            if str(member).strip()
+        ]
+        for item in raw_section.get("groupedCategories", [])
+        if isinstance(item, dict) and str(item.get("code", "")).strip()
+    }
+    raw_to_scale = {
+        int(item["raw"]): int(item["scale"])
+        for item in raw_section.get("rawToScale", [])
+        if isinstance(item, dict)
+        and item.get("raw") is not None
+        and item.get("scale") is not None
+    }
+    category_order = [
+        str(code).strip()
+        for code in raw_section.get("categoryOrder", [])
+        if str(code).strip()
+    ]
+
+    answer_key = [normalize_answer(value) for value in raw_answer_key]
+    category_by_question = []
+    for raw_category in raw_category_by_question:
+        cleaned = str(raw_category).strip().upper() if raw_category is not None else ""
+        if cleaned in {"", "NULL", "NONE", "-", "N/A", "NA"}:
+            category_by_question.append(None)
+        else:
+            category_by_question.append(cleaned)
+
+    return {
+        "title": str(raw_section.get("title") or section_name.title()),
+        "totalQuestions": total_questions,
+        "totalPossible": int(raw_section.get("totalPossible") or 0),
+        "notScored": not_scored,
+        "answerKey": answer_key,
+        "categoryByQuestion": category_by_question,
+        "categoryDisplayNames": category_display_names,
+        "categoryOrder": category_order,
+        "groupedCategories": grouped_categories,
+        "rawToScale": raw_to_scale,
+    }
+
+
+def normalize_scoring_config(payload):
+    if not isinstance(payload, dict):
+        raise ValueError("Scoring config must be an object")
+
+    sections = payload.get("sections")
+    if not isinstance(sections, dict):
+        raise ValueError("Scoring config sections are required")
+
+    normalized_sections = {
+        section_name: normalize_scoring_section(section_name, sections.get(section_name))
+        for section_name in SECTION_CONFIG
+    }
+    answer_keys = {
+        section_name: normalized_sections[section_name]["answerKey"]
+        for section_name in SECTION_CONFIG
+    }
+    normalize_answer_keys(answer_keys)
+
+    return {
+        "profileId": str(payload.get("profileId") or "").strip() or "custom",
+        "summary": str(payload.get("summary") or "").strip(),
+        "sections": normalized_sections,
+    }
+
+
+def normalize_module(raw_item, fallback_prefix, index):
+    if not isinstance(raw_item, dict):
+        raise ValueError("Recommendation module must be an object")
+
+    title = str(raw_item.get("title") or "").strip()
+    if not title:
+        raise ValueError("Recommendation module title is required")
+
+    normalized = {
+        "id": str(raw_item.get("id") or f"{fallback_prefix}-{index}").strip(),
+        "title": title,
+    }
+
+    for field_name in ("subtitle", "topic", "reason", "priority"):
+        value = raw_item.get(field_name)
+        if value is not None and str(value).strip():
+            normalized[field_name] = str(value).strip()
+
+    return normalized
+
+
+def normalize_recommendation_section(section_name, payload):
+    if not isinstance(payload, dict):
+        raise ValueError(f"Recommendation section '{section_name}' must be an object")
+
+    strategy = [
+        normalize_module(item, f"{section_name}-strategy", index)
+        for index, item in enumerate(payload.get("strategy", []), start=1)
+    ]
+    categories = {}
+
+    for raw_category in payload.get("categories", []):
+        if not isinstance(raw_category, dict):
+            raise ValueError("Recommendation category must be an object")
+
+        code = str(raw_category.get("code") or "").strip().upper()
+        label = str(raw_category.get("label") or code).strip()
+        if not code:
+            raise ValueError("Recommendation category code is required")
+
+        bands = []
+        for band_index, raw_band in enumerate(raw_category.get("bands", []), start=1):
+            if not isinstance(raw_band, dict):
+                raise ValueError("Recommendation band must be an object")
+
+            items = [
+                normalize_module(item, f"{section_name}-{code}", item_index)
+                for item_index, item in enumerate(raw_band.get("items", []), start=1)
+            ]
+            if not items:
+                continue
+
+            normalized_band = {"items": items}
+            for source_name, target_name in (("minScore", "min"), ("maxScore", "max")):
+                value = raw_band.get(source_name)
+                if value is not None and str(value).strip() != "":
+                    normalized_band[target_name] = int(value)
+
+            for field_name in ("priority", "reason"):
+                value = raw_band.get(field_name)
+                if value is not None and str(value).strip():
+                    normalized_band[field_name] = str(value).strip()
+
+            bands.append(normalized_band)
+
+        categories[code] = {
+            "label": label,
+            "bands": bands,
+        }
+
+    return {
+        "section": section_name,
+        "summary": str(payload.get("summary") or "").strip(),
+        "strategy": strategy,
+        "categories": categories,
+    }
+
+
+def extract_scoring_config_from_pdf(pdf_bytes, filename):
+    extracted = extract_pdf_tool_payload(
+        pdf_bytes,
+        (
+            "You are extracting a complete ACT scoring rubric from the uploaded PDF. "
+            "Return a scoring config for the sections english (50), math (45), reading (36), and science (40). "
+            "For answerKey, output one entry per question using A/B/C/D/F/G/H/J or 'null'. "
+            "For categoryByQuestion, output one entry per question using the category code or 'null'. "
+            "Include totalQuestions, totalPossible, notScored question numbers, categoryDisplayNames, "
+            "categoryOrder, groupedCategories such as PHM where present, and the rawToScale table. "
+            "Use profileId 'act-p1' only if the rubric clearly identifies ACT Practice Test 1; otherwise use a stable custom id. "
+            "Also provide a short summary of what was extracted and any ambiguity. You must call the tool."
+        ),
+        "submit_scoring_config",
+        build_scoring_schema(),
+    )
+    normalized = normalize_scoring_config(extracted)
+    return normalized, normalized["summary"]
+
+
+def extract_recommendation_section_from_pdf(section_name, pdf_bytes, filename):
+    extracted = extract_pdf_tool_payload(
+        pdf_bytes,
+        (
+            f"You are extracting ACT {section_name} study recommendation rules from the uploaded PDF. "
+            "Return strategy modules plus category-based recommendation bands. "
+            "Keep the modules in the order shown in the PDF. "
+            "If a category always recommends the same materials, include one band with only items. "
+            "If a score range is specified, put it in minScore and maxScore. "
+            "Also provide a short summary and call the tool."
+        ),
+        f"submit_{section_name}_recommendations",
+        build_recommendation_section_schema(),
+    )
+    normalized = normalize_recommendation_section(section_name, extracted)
+    return normalized, normalized["summary"]
+
+
+def build_test_package_from_uploads(scoring_pdf_bytes, scoring_filename, recommendation_pdfs):
+    scoring_config, scoring_summary = extract_scoring_config_from_pdf(
+        scoring_pdf_bytes, scoring_filename
+    )
+    recommendation_sections = {}
+    recommendation_summaries = []
+
+    for section_name, upload_payload in recommendation_pdfs.items():
+        section_config, section_summary = extract_recommendation_section_from_pdf(
+            section_name,
+            upload_payload["bytes"],
+            upload_payload["filename"],
+        )
+        recommendation_sections[section_name] = section_config
+        if section_summary:
+            recommendation_summaries.append(f"{section_name.title()}: {section_summary}")
+
+    recommendation_config = {
+        "summary": " | ".join(recommendation_summaries),
+        "sections": recommendation_sections,
+    }
+    extraction_summary = " | ".join(
+        part for part in [scoring_summary, recommendation_config["summary"]] if part
+    )
+    return scoring_config, recommendation_config, extraction_summary
 
 
 def section_counts(answer_keys):
@@ -524,10 +896,24 @@ def serialize_test(row, include_answer_keys=False):
         "createdAt": row["created_at"],
         "updatedAt": row["updated_at"],
         "sectionCounts": section_counts(answer_keys),
+        "configStatus": row["config_status"] or "legacy",
+        "recommendationFilenames": (
+            json.loads(row["recommendation_filenames_json"])
+            if row["recommendation_filenames_json"]
+            else {}
+        ),
     }
 
     if include_answer_keys:
         payload["answerKeys"] = answer_keys
+        payload["scoringConfig"] = (
+            json.loads(row["scoring_config_json"]) if row["scoring_config_json"] else None
+        )
+        payload["recommendationConfig"] = (
+            json.loads(row["recommendation_config_json"])
+            if row["recommendation_config_json"]
+            else None
+        )
 
     return payload
 
@@ -536,7 +922,8 @@ def list_tests(include_answer_keys=False):
     with get_connection() as connection:
         rows = connection.execute(
             """
-            SELECT id, name, answer_keys_json, source_filename, extraction_summary, created_at, updated_at
+            SELECT id, name, answer_keys_json, source_filename, extraction_summary, created_at, updated_at,
+                   scoring_config_json, recommendation_config_json, recommendation_filenames_json, config_status
             FROM tests
             ORDER BY datetime(created_at) DESC, id DESC
             """
@@ -545,23 +932,62 @@ def list_tests(include_answer_keys=False):
     return [serialize_test(row, include_answer_keys=include_answer_keys) for row in rows]
 
 
-def save_test(name, answer_keys, source_filename=None, extraction_summary=None):
+def save_test(
+    name,
+    answer_keys,
+    source_filename=None,
+    extraction_summary=None,
+    scoring_config=None,
+    recommendation_config=None,
+    recommendation_filenames=None,
+    config_status=None,
+):
     created_at = utc_now_iso()
     answer_keys_json = json.dumps(answer_keys)
+    scoring_config_json = json.dumps(scoring_config) if scoring_config else None
+    recommendation_config_json = (
+        json.dumps(recommendation_config) if recommendation_config else None
+    )
+    recommendation_filenames_json = (
+        json.dumps(recommendation_filenames) if recommendation_filenames else None
+    )
 
     with get_connection() as connection:
         cursor = connection.execute(
             """
-            INSERT INTO tests (name, answer_keys_json, source_filename, extraction_summary, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO tests (
+                name,
+                answer_keys_json,
+                source_filename,
+                extraction_summary,
+                created_at,
+                updated_at,
+                scoring_config_json,
+                recommendation_config_json,
+                recommendation_filenames_json,
+                config_status
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
-            (name, answer_keys_json, source_filename, extraction_summary, created_at, created_at),
+            (
+                name,
+                answer_keys_json,
+                source_filename,
+                extraction_summary,
+                created_at,
+                created_at,
+                scoring_config_json,
+                recommendation_config_json,
+                recommendation_filenames_json,
+                config_status,
+            ),
         )
         connection.commit()
         test_id = cursor.lastrowid
         row = connection.execute(
             """
-            SELECT id, name, answer_keys_json, source_filename, extraction_summary, created_at, updated_at
+            SELECT id, name, answer_keys_json, source_filename, extraction_summary, created_at, updated_at,
+                   scoring_config_json, recommendation_config_json, recommendation_filenames_json, config_status
             FROM tests
             WHERE id = ?
             """,
@@ -602,12 +1028,111 @@ def admin_tests(_: str = Depends(require_admin)):
 @app.post("/admin/tests/import-pdf")
 async def import_test_from_pdf(
     name: str = Form(...),
-    file: UploadFile = File(...),
+    file: UploadFile | None = File(default=None),
+    scoringRubricFile: UploadFile | None = File(default=None),
+    englishRecommendationFile: UploadFile | None = File(default=None),
+    mathRecommendationFile: UploadFile | None = File(default=None),
+    readingRecommendationFile: UploadFile | None = File(default=None),
+    scienceRecommendationFile: UploadFile | None = File(default=None),
     _: str = Depends(require_admin),
 ):
     cleaned_name = name.strip()
     if not cleaned_name:
         raise HTTPException(status_code=400, detail="Test name is required.")
+
+    new_workflow_uploads = [
+        scoringRubricFile,
+        englishRecommendationFile,
+        mathRecommendationFile,
+        readingRecommendationFile,
+        scienceRecommendationFile,
+    ]
+    is_new_workflow = any(upload is not None for upload in new_workflow_uploads)
+
+    if is_new_workflow:
+        required_uploads = {
+            "scoring rubric": scoringRubricFile,
+            "english recommendations": englishRecommendationFile,
+            "math recommendations": mathRecommendationFile,
+            "reading recommendations": readingRecommendationFile,
+            "science recommendations": scienceRecommendationFile,
+        }
+        missing_uploads = [
+            label for label, upload in required_uploads.items() if upload is None
+        ]
+        if missing_uploads:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Missing required PDFs: {', '.join(missing_uploads)}.",
+            )
+
+        recommendation_pdfs = {}
+        recommendation_filenames = {}
+        for section_name, upload in (
+            ("english", englishRecommendationFile),
+            ("math", mathRecommendationFile),
+            ("reading", readingRecommendationFile),
+            ("science", scienceRecommendationFile),
+        ):
+            filename = upload.filename or f"{section_name}-recommendations.pdf"
+            if not filename.lower().endswith(".pdf"):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{section_name.title()} recommendations must be uploaded as a PDF.",
+                )
+
+            pdf_bytes = await upload.read()
+            if not pdf_bytes:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"{section_name.title()} recommendations PDF is empty.",
+                )
+
+            recommendation_pdfs[section_name] = {
+                "bytes": pdf_bytes,
+                "filename": filename,
+            }
+            recommendation_filenames[section_name] = filename
+
+        scoring_filename = scoringRubricFile.filename or "scoring-rubric.pdf"
+        if not scoring_filename.lower().endswith(".pdf"):
+            raise HTTPException(
+                status_code=400,
+                detail="Please upload the scoring rubric as a PDF.",
+            )
+
+        scoring_pdf_bytes = await scoringRubricFile.read()
+        if not scoring_pdf_bytes:
+            raise HTTPException(status_code=400, detail="Uploaded scoring rubric PDF is empty.")
+
+        scoring_config, recommendation_config, extraction_summary = (
+            build_test_package_from_uploads(
+                scoring_pdf_bytes,
+                scoring_filename,
+                recommendation_pdfs,
+            )
+        )
+        answer_keys = {
+            section_name: scoring_config["sections"][section_name]["answerKey"]
+            for section_name in SECTION_CONFIG
+        }
+        created_test = save_test(
+            name=cleaned_name,
+            answer_keys=answer_keys,
+            source_filename=scoring_filename,
+            extraction_summary=extraction_summary,
+            scoring_config=scoring_config,
+            recommendation_config=recommendation_config,
+            recommendation_filenames=recommendation_filenames,
+            config_status="configured",
+        )
+        return {"test": created_test}
+
+    if file is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Upload either a legacy answer-key PDF or the full test package PDFs.",
+        )
 
     filename = file.filename or "answer-key.pdf"
     if not filename.lower().endswith(".pdf"):
@@ -617,12 +1142,37 @@ async def import_test_from_pdf(
     if not pdf_bytes:
         raise HTTPException(status_code=400, detail="Uploaded PDF is empty.")
 
-    answer_keys, extraction_summary = extract_answer_keys_from_pdf(pdf_bytes, filename)
+    extracted = extract_pdf_tool_payload(
+        pdf_bytes,
+        (
+            "You are extracting answer keys from an uploaded test-answer-key PDF. "
+            "Return only the official answer key values for the sections english (50), math (45), "
+            "reading (36), and science (40). Convert A or F to 1, B or G to 2, C or H to 3, "
+            "D or J to 4. If a question has no answer or is unreadable, return the string 'null'. "
+            "Do not skip questions. Keep the answers in order. Also provide a short summary of what "
+            "you extracted or any ambiguity you noticed. You must call the provided tool."
+        ),
+        "submit_answer_key",
+        {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "english": {"type": "array", "items": {"type": "string"}},
+                "math": {"type": "array", "items": {"type": "string"}},
+                "reading": {"type": "array", "items": {"type": "string"}},
+                "science": {"type": "array", "items": {"type": "string"}},
+                "summary": {"type": "string"},
+            },
+            "required": ["english", "math", "reading", "science", "summary"],
+        },
+    )
+    answer_keys = normalize_answer_keys(extracted)
     created_test = save_test(
         name=cleaned_name,
         answer_keys=answer_keys,
         source_filename=filename,
-        extraction_summary=extraction_summary,
+        extraction_summary=extracted.get("summary", ""),
+        config_status="legacy",
     )
     return {"test": created_test}
 
