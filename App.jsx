@@ -448,11 +448,13 @@ const styles = `
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 18px;
+    align-items: start;
   }
 
   .study-plan-card {
     display: grid;
     gap: 16px;
+    align-content: start;
   }
 
   .study-plan-header {
@@ -472,6 +474,7 @@ const styles = `
   .study-module-list {
     display: grid;
     gap: 10px;
+    align-content: start;
   }
 
   .study-category-card,
