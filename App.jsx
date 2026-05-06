@@ -1003,9 +1003,9 @@ const styles = `
 
   .score-report-head {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 18px;
-    align-items: center;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    align-items: stretch;
     scroll-margin-top: 24px;
     border-radius: 24px;
   }
@@ -1034,12 +1034,14 @@ const styles = `
 
   .score-kpis {
     display: grid;
-    grid-template-columns: repeat(4, minmax(120px, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
     gap: 10px;
+    width: 100%;
   }
 
   .score-kpi {
-    padding: 14px;
+    min-width: 0;
+    padding: 16px;
     border: 1px solid var(--line);
     border-radius: 18px;
     background: var(--surface-soft);
@@ -1055,19 +1057,21 @@ const styles = `
 
   .score-kpi-value {
     margin-top: 6px;
-    font-size: 1.45rem;
+    font-size: clamp(1.35rem, 2.4vw, 1.75rem);
     font-weight: 900;
     color: var(--filled);
+    line-height: 1.05;
   }
 
   .scan-summary {
     display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
     gap: 10px;
     margin-top: 14px;
   }
 
   .scan-summary-card {
+    min-width: 0;
     padding: 12px;
     border-radius: 18px;
     background: var(--surface-soft);
@@ -1084,8 +1088,9 @@ const styles = `
 
   .scan-summary-value {
     margin-top: 4px;
-    font-size: 1.2rem;
+    font-size: clamp(1.05rem, 2vw, 1.25rem);
     font-weight: 900;
+    line-height: 1.15;
   }
 
   .section-status {
@@ -1339,9 +1344,7 @@ const styles = `
     .hero-grid,
     .results-grid,
     .admin-grid,
-    .study-plan-grid,
-    .score-report-head,
-    .score-kpis {
+    .study-plan-grid {
       grid-template-columns: 1fr;
     }
   }
@@ -2767,14 +2770,15 @@ export default function App() {
               })}
             </section>
 
-            {studyRecommendations && !resultReadSummary.isLowConfidence ? (
+            {studyRecommendations ? (
               <section className="study-plan-shell">
                 <div className="panel-card">
                   <div className="study-plan-header">
                     <h2 className="panel-title">Recommended Study Plan</h2>
                     <p className="study-plan-copy">
-                      Based on your category breakdown, these Prepmedians modules
-                      start with the areas that can move your score the most.
+                      {resultReadSummary.isLowConfidence
+                        ? "This scan was hard to read, so review the detected answers before relying on these recommendations."
+                        : "Based on your category breakdown, these Prepmedians modules start with the areas that can move your score the most."}
                     </p>
                   </div>
                 </div>
