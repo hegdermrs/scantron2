@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   matchesPracticeTest1,
@@ -367,6 +367,11 @@ const styles = `
     color: var(--accent);
   }
 
+  .message.warning {
+    background: var(--warning-soft);
+    color: var(--warning);
+  }
+
   .results-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -733,6 +738,7 @@ const styles = `
     grid-template-columns: minmax(0, 1fr) auto;
     gap: 18px;
     align-items: center;
+    scroll-margin-top: 24px;
   }
 
   .score-kpis {
@@ -949,12 +955,140 @@ function countAnswers(sectionAnswers = []) {
   };
 }
 
-function validateAnswerKeyPayload(payload) {
-  if (!payload || typeof payload !== "object") {
-    return false;
+function parseJsonLike(value) {
+  if (typeof value !== "string") {
+    return value;
   }
 
-  return SECTION_CONFIG.every(({ key }) => Array.isArray(payload[key]));
+  const trimmed = value.trim();
+  if (!trimmed || !["{", "["].includes(trimmed[0])) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function normalizeDetectedAnswer(value) {
+  if (value === null || value === undefined || value === "") {
+    return null;
+  }
+
+  const cleaned = String(value).trim().toUpperCase();
+  if (!cleaned || cleaned === "NULL" || cleaned === "-") {
+    return null;
+  }
+
+  const labelMap = {
+    A: 1,
+    B: 2,
+    C: 3,
+    D: 4,
+    F: 1,
+    G: 2,
+    H: 3,
+    J: 4,
+  };
+
+  if (labelMap[cleaned]) {
+    return labelMap[cleaned];
+  }
+
+  const numericValue = Number(cleaned);
+  return Number.isInteger(numericValue) && numericValue >= 1 && numericValue <= 4
+    ? numericValue
+    : null;
+}
+
+function coerceSectionAnswers(value, total) {
+  const parsedValue = parseJsonLike(value);
+  let answers = null;
+
+  if (Array.isArray(parsedValue)) {
+    answers = parsedValue;
+  } else if (parsedValue && typeof parsedValue === "object") {
+    const numericKeys = Object.keys(parsedValue)
+      .map((key) => Number(key))
+      .filter((key) => Number.isInteger(key))
+      .sort((left, right) => left - right);
+
+    if (numericKeys.length) {
+      const zeroBased = numericKeys.includes(0);
+      answers = Array(total).fill(null);
+
+      numericKeys.forEach((key) => {
+        const index = zeroBased ? key : key - 1;
+        if (index >= 0 && index < total) {
+          answers[index] = parsedValue[key] ?? parsedValue[String(key)];
+        }
+      });
+    }
+  }
+
+  if (!answers) {
+    return null;
+  }
+
+  return Array.from({ length: total }, (_, index) =>
+    normalizeDetectedAnswer(answers[index])
+  );
+}
+
+function normalizeAnswerKeyPayload(payload, depth = 0) {
+  if (depth > 4) {
+    return null;
+  }
+
+  const parsedPayload = parseJsonLike(payload);
+
+  if (Array.isArray(parsedPayload)) {
+    for (const item of parsedPayload) {
+      const normalized = normalizeAnswerKeyPayload(item, depth + 1);
+      if (normalized) {
+        return normalized;
+      }
+    }
+    return null;
+  }
+
+  if (!parsedPayload || typeof parsedPayload !== "object") {
+    return null;
+  }
+
+  const normalizedSections = {};
+  const hasAllSections = SECTION_CONFIG.every(({ key, total }) => {
+    const answers = coerceSectionAnswers(parsedPayload[key], total);
+    if (!answers) {
+      return false;
+    }
+
+    normalizedSections[key] = answers;
+    return true;
+  });
+
+  if (hasAllSections) {
+    return {
+      ...normalizedSections,
+      _status: parsedPayload._status || "ok",
+      _warnings: Array.isArray(parsedPayload._warnings)
+        ? parsedPayload._warnings
+        : [],
+    };
+  }
+
+  for (const key of ["json", "body", "data", "result", "results", "response"]) {
+    if (key in parsedPayload) {
+      const normalized = normalizeAnswerKeyPayload(parsedPayload[key], depth + 1);
+      if (normalized) {
+        return normalized;
+      }
+    }
+  }
+
+  return null;
 }
 
 function formatSavedDate(isoDate) {
@@ -1049,7 +1183,9 @@ function buildBasicAuthHeader(username, password) {
 }
 
 export default function App() {
+  const resultsRef = useRef(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [fileInputResetKey, setFileInputResetKey] = useState(0);
   const [selectedTestId, setSelectedTestId] = useState("");
   const [availableTests, setAvailableTests] = useState([]);
   const [testsLoading, setTestsLoading] = useState(false);
@@ -1205,6 +1341,22 @@ export default function App() {
     setUploadSuccess("");
   };
 
+  const handleViewResults = () => {
+    resultsRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
+  const handleStartOver = () => {
+    setSelectedFile(null);
+    setResults(null);
+    setApiPreview(null);
+    setError("");
+    setUploadSuccess("");
+    setFileInputResetKey((current) => current + 1);
+  };
+
   const runEndpointAction = async (actionKey) => {
     if (!selectedFile) {
       setError("Please upload an answer sheet image first.");
@@ -1244,18 +1396,22 @@ export default function App() {
       }
 
       const payload = await readApiResponse(response);
+      const normalizedResults =
+        payload.type === "json" ? normalizeAnswerKeyPayload(payload.data) : null;
 
-      if (payload.type === "json" && validateAnswerKeyPayload(payload.data)) {
-        setResults(payload.data);
+      if (normalizedResults) {
+        setResults(normalizedResults);
+        setUploadSuccess(endpoint.successMessage);
       } else {
         setApiPreview({
           ...payload,
           endpointLabel: endpoint.label,
           endpointUrl: endpoint.url,
         });
+        setError(
+          "We received a response, but could not turn it into a score report yet."
+        );
       }
-
-      setUploadSuccess(endpoint.successMessage);
     } catch (uploadError) {
       const friendlyMessage =
         uploadError.message &&
@@ -1514,6 +1670,7 @@ export default function App() {
                 <label htmlFor="omr-file">Upload answer sheet</label>
                 <div className="file-pick">
                   <input
+                    key={`student-upload-${fileInputResetKey}`}
                     id="omr-file"
                     className="file-input"
                     type="file"
@@ -1545,13 +1702,32 @@ export default function App() {
               ) : null}
 
               <div className="button-row">
-                <button
-                  type="submit"
-                  className="primary-button"
-                  disabled={isLoading || !selectedFile || !selectedTestId}
-                >
-                  {isLoading ? "Building Your Report..." : "Get My Results"}
-                </button>
+                {results ? (
+                  <>
+                    <button
+                      type="button"
+                      className="primary-button"
+                      onClick={handleViewResults}
+                    >
+                      See My Results
+                    </button>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={handleStartOver}
+                    >
+                      Score Another Sheet
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    type="submit"
+                    className="primary-button"
+                    disabled={isLoading || !selectedFile || !selectedTestId}
+                  >
+                    {isLoading ? "Building Your Report..." : "Get My Results"}
+                  </button>
+                )}
               </div>
 
               <p className="helper-text">
@@ -1611,7 +1787,7 @@ export default function App() {
 
         {results ? (
           <>
-            <section className="panel-card score-report-head">
+            <section ref={resultsRef} className="panel-card score-report-head">
               <div>
                 <h2 className="panel-title">Score Report</h2>
                 <p className="panel-subtitle">
