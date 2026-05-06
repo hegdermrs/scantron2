@@ -1235,7 +1235,17 @@ async def parse_omr_route(
         raise HTTPException(status_code=502, detail=detail)
 
     if "application/json" in content_type:
-        return response.json()
+        try:
+            return response.json()
+        except ValueError as exc:
+            body_preview = response.text[:300].strip()
+            raise HTTPException(
+                status_code=502,
+                detail=(
+                    "Parse webhook returned an invalid JSON response."
+                    + (f" Preview: {body_preview}" if body_preview else "")
+                ),
+            ) from exc
 
     raise HTTPException(
         status_code=502,
