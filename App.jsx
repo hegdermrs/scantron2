@@ -112,6 +112,49 @@ const styles = `
     gap: 16px;
   }
 
+  .header-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .educator-profile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow-soft);
+  }
+
+  .profile-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    font-size: 0.82rem;
+    font-weight: 900;
+  }
+
+  .profile-name {
+    margin: 0;
+    font-size: 0.88rem;
+    font-weight: 800;
+  }
+
+  .profile-role {
+    margin: 1px 0 0;
+    color: var(--muted);
+    font-size: 0.76rem;
+  }
+
   .brand-mark {
     display: flex;
     align-items: center;
@@ -350,6 +393,119 @@ const styles = `
     line-height: 1.5;
   }
 
+  .photo-checklist {
+    display: grid;
+    gap: 10px;
+    padding: 14px;
+    border-radius: 8px;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+  }
+
+  .photo-checklist-title {
+    margin: 0;
+    font-size: 0.92rem;
+    font-weight: 800;
+  }
+
+  .photo-checklist-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .photo-check-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--muted);
+    font-size: 0.88rem;
+  }
+
+  .photo-check-icon {
+    width: 18px;
+    height: 18px;
+    border-radius: 999px;
+    display: grid;
+    place-items: center;
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    font-size: 0.72rem;
+    font-weight: 900;
+    flex: 0 0 auto;
+  }
+
+  .photo-preview-card {
+    display: grid;
+    gap: 10px;
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+  }
+
+  .photo-preview-image {
+    width: 100%;
+    max-height: 220px;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1px solid var(--line);
+  }
+
+  .photo-guide {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 2px;
+  }
+
+  .photo-example {
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+    border-radius: 8px;
+    background: #ffffff;
+    border: 1px solid var(--line);
+  }
+
+  .photo-example-label {
+    margin: 0;
+    font-size: 0.78rem;
+    font-weight: 800;
+    color: var(--muted);
+  }
+
+  .sample-photo {
+    height: 86px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: linear-gradient(135deg, #e8f3f1, #f9fbfc);
+    overflow: hidden;
+  }
+
+  .sample-photo.bad {
+    background: linear-gradient(135deg, #f4e7df, #f9fbfc);
+  }
+
+  .sample-sheet {
+    width: 54px;
+    height: 70px;
+    border-radius: 4px;
+    background:
+      repeating-linear-gradient(to bottom, transparent 0 9px, rgba(15, 23, 42, 0.12) 9px 11px),
+      #ffffff;
+    border: 2px solid rgba(15, 23, 42, 0.2);
+    box-shadow: 0 8px 18px rgba(15, 23, 42, 0.12);
+  }
+
+  .sample-photo.bad .sample-sheet {
+    transform: rotate(-13deg) translateX(10px);
+    filter: blur(1px);
+    opacity: 0.72;
+  }
+
   .message {
     border-radius: 8px;
     padding: 14px 16px;
@@ -455,6 +611,15 @@ const styles = `
 
   .results-banner {
     grid-column: 1 / -1;
+  }
+
+  .scan-warning-list {
+    margin: 8px 0 0;
+    padding-left: 18px;
+  }
+
+  .scan-warning-list li {
+    margin-top: 4px;
   }
 
   .study-plan-shell {
@@ -741,6 +906,28 @@ const styles = `
     scroll-margin-top: 24px;
   }
 
+  .results-action-bar {
+    position: sticky;
+    top: 12px;
+    z-index: 12;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px;
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.92);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(12px);
+  }
+
+  .results-action-copy {
+    margin: 0;
+    color: var(--muted);
+    font-size: 0.9rem;
+  }
+
   .score-kpis {
     display: grid;
     grid-template-columns: repeat(4, minmax(120px, 1fr));
@@ -767,6 +954,65 @@ const styles = `
     font-size: 1.45rem;
     font-weight: 900;
     color: var(--filled);
+  }
+
+  .scan-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 10px;
+    margin-top: 14px;
+  }
+
+  .scan-summary-card {
+    padding: 12px;
+    border-radius: 8px;
+    background: var(--surface-soft);
+    border: 1px solid var(--line);
+  }
+
+  .scan-summary-label {
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  .scan-summary-value {
+    margin-top: 4px;
+    font-size: 1.2rem;
+    font-weight: 900;
+  }
+
+  .section-status {
+    border-radius: 999px;
+    padding: 8px 10px;
+    font-size: 0.78rem;
+    font-weight: 900;
+  }
+
+  .section-status.good {
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+  }
+
+  .section-status.review {
+    background: var(--warning-soft);
+    color: var(--warning);
+  }
+
+  .section-status.poor {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+
+  .low-confidence-card {
+    display: grid;
+    gap: 10px;
+    padding: 16px;
+    border-radius: 8px;
+    background: var(--warning-soft);
+    color: var(--warning);
   }
 
   .answer-review {
@@ -797,6 +1043,50 @@ const styles = `
     background: rgba(15, 23, 42, 0.42);
     backdrop-filter: blur(10px);
     animation: fadeIn 0.18s ease both;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 45;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.46);
+    backdrop-filter: blur(10px);
+    animation: fadeIn 0.18s ease both;
+  }
+
+  .login-modal {
+    width: min(430px, 100%);
+    border-radius: 8px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    box-shadow: var(--shadow);
+    padding: 22px;
+    display: grid;
+    gap: 18px;
+  }
+
+  .modal-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 14px;
+  }
+
+  .icon-button {
+    border: 0;
+    width: 34px;
+    height: 34px;
+    border-radius: 8px;
+    display: grid;
+    place-items: center;
+    background: var(--surface-soft);
+    color: var(--muted);
+    cursor: pointer;
+    font-size: 1.25rem;
+    line-height: 1;
   }
 
   .loading-modal {
@@ -839,11 +1129,43 @@ const styles = `
   }
 
   .modal-step {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     padding: 10px 12px;
     border-radius: 8px;
     background: var(--surface-soft);
     color: var(--muted);
     font-size: 0.9rem;
+    opacity: 0.46;
+    transform: translateX(-4px);
+    transition: opacity 0.25s ease, transform 0.25s ease, background 0.25s ease, color 0.25s ease;
+  }
+
+  .modal-step.active {
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  .modal-step.complete {
+    opacity: 0.78;
+    transform: translateX(0);
+  }
+
+  .modal-step-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 999px;
+    background: currentColor;
+    flex: 0 0 auto;
+    opacity: 0.42;
+  }
+
+  .modal-step.active .modal-step-dot {
+    opacity: 1;
+    animation: pulseDot 0.9s ease-in-out infinite;
   }
 
   @keyframes rise {
@@ -869,6 +1191,19 @@ const styles = `
   @keyframes spin {
     to {
       transform: rotate(360deg);
+    }
+  }
+
+  @keyframes pulseDot {
+    0%,
+    100% {
+      transform: scale(0.9);
+      opacity: 0.55;
+    }
+
+    50% {
+      transform: scale(1.28);
+      opacity: 1;
     }
   }
 
@@ -899,6 +1234,11 @@ const styles = `
       align-items: flex-start;
     }
 
+    .header-actions {
+      width: 100%;
+      justify-content: flex-start;
+    }
+
     .hero-title {
       font-size: 2rem;
     }
@@ -918,9 +1258,21 @@ const styles = `
       grid-template-columns: 1fr;
     }
 
-    .score-overview,
-    .score-category-grid {
+    .photo-checklist-grid {
       grid-template-columns: 1fr;
+    }
+
+    .score-overview,
+    .score-category-grid,
+    .scan-summary,
+    .photo-guide {
+      grid-template-columns: 1fr;
+    }
+
+    .results-action-bar {
+      position: static;
+      align-items: flex-start;
+      flex-direction: column;
     }
 
     .loading-modal {
@@ -952,6 +1304,70 @@ function countAnswers(sectionAnswers = []) {
   return {
     answered,
     blank: sectionAnswers.length - answered,
+  };
+}
+
+function summarizeResults(results) {
+  if (!results) {
+    return {
+      answered: 0,
+      blank: 0,
+      total: SECTION_CONFIG.reduce((sum, section) => sum + section.total, 0),
+      percentAnswered: 0,
+      hasManyBlanks: false,
+      isLowConfidence: false,
+    };
+  }
+
+  const totals = SECTION_CONFIG.reduce(
+    (summary, { key, total }) => {
+      const answers = Array.isArray(results[key]) ? results[key] : [];
+      const counts = countAnswers(answers);
+      summary.answered += counts.answered;
+      summary.blank += total - counts.answered;
+      summary.total += total;
+      return summary;
+    },
+    { answered: 0, blank: 0, total: 0 }
+  );
+
+  const percentAnswered = totals.total ? totals.answered / totals.total : 0;
+
+  return {
+    ...totals,
+    percentAnswered,
+    hasManyBlanks: percentAnswered < 0.75,
+    isLowConfidence: totals.answered < 10 || percentAnswered < 0.08,
+  };
+}
+
+function getSectionScanStatus(counts, total) {
+  const answeredPercent = total ? counts.answered / total : 0;
+
+  if (counts.answered === 0 || answeredPercent < 0.2) {
+    return {
+      label: "Needs a new photo",
+      className: "poor",
+    };
+  }
+
+  if (answeredPercent < 0.8) {
+    return {
+      label: "Needs review",
+      className: "review",
+    };
+  }
+
+  if (counts.blank > 0) {
+    return {
+      label: "Some blanks",
+      className: "review",
+    };
+  }
+
+  return {
+    label: "Looks good",
+    className: "good",
   };
 }
 
@@ -1183,9 +1599,13 @@ function buildBasicAuthHeader(username, password) {
 }
 
 export default function App() {
+  const uploadRef = useRef(null);
   const resultsRef = useRef(null);
+  const answersRef = useRef(null);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [selectedFilePreviewUrl, setSelectedFilePreviewUrl] = useState("");
   const [fileInputResetKey, setFileInputResetKey] = useState(0);
+  const [isAnswerReviewOpen, setIsAnswerReviewOpen] = useState(false);
   const [selectedTestId, setSelectedTestId] = useState("");
   const [availableTests, setAvailableTests] = useState([]);
   const [testsLoading, setTestsLoading] = useState(false);
@@ -1194,9 +1614,11 @@ export default function App() {
   const [apiPreview, setApiPreview] = useState(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingStepIndex, setLoadingStepIndex] = useState(0);
   const [uploadSuccess, setUploadSuccess] = useState("");
 
   const [isAdminOpen, setIsAdminOpen] = useState(false);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
   const [adminCredentials, setAdminCredentials] = useState({
     username: ADMIN_USERNAME,
@@ -1258,6 +1680,7 @@ export default function App() {
 
     return generateRecommendations(practiceTest1ScoringState.scores);
   }, [practiceTest1ScoringState.scores]);
+  const resultReadSummary = useMemo(() => summarizeResults(results), [results]);
   const scoreSummaryItems = useMemo(
     () =>
       SECTION_CONFIG.map(({ key, title }) => {
@@ -1268,14 +1691,24 @@ export default function App() {
         return {
           key,
           title,
-          primary: sectionScore ? sectionScore.scaleScore : counts.answered,
-          label: sectionScore ? "ACT score" : "Answered",
-          meta: sectionScore
+          primary: resultReadSummary.isLowConfidence
+            ? "Review"
+            : sectionScore
+              ? sectionScore.scaleScore
+              : counts.answered,
+          label: resultReadSummary.isLowConfidence
+            ? "Scan quality"
+            : sectionScore
+              ? "ACT score"
+              : "Answered",
+          meta: resultReadSummary.isLowConfidence
+            ? "Try a clearer photo"
+            : sectionScore
             ? `${sectionScore.rawScore} of ${sectionScore.totalPossible} questions correct`
             : `${counts.blank} blank`,
         };
       }),
-    [practiceTest1ScoringState.scores, results]
+    [practiceTest1ScoringState.scores, resultReadSummary.isLowConfidence, results]
   );
 
   const loadPublicTests = async () => {
@@ -1318,9 +1751,68 @@ export default function App() {
     setSavedTests(Array.isArray(payload.tests) ? payload.tests : []);
   };
 
+  const loadingModal = isSavingTest
+    ? {
+        title: "Saving test",
+        copy: "We are reading the scoring guide and study materials. This can take a little while for larger PDFs.",
+        steps: [
+          "Reading the scoring guide",
+          "Preparing study recommendations",
+          "Saving the test for students",
+        ],
+      }
+    : {
+        title: "Building your score report",
+        copy: "We are reading the sheet, checking each section, and preparing your results.",
+        steps: [
+          "Reading answer marks",
+          "Scoring each section",
+          "Preparing study recommendations",
+        ],
+      };
+
   useEffect(() => {
     loadPublicTests();
   }, []);
+
+  useEffect(() => {
+    if (!selectedFile) {
+      setSelectedFilePreviewUrl("");
+      return undefined;
+    }
+
+    const nextPreviewUrl = URL.createObjectURL(selectedFile);
+    setSelectedFilePreviewUrl(nextPreviewUrl);
+
+    return () => URL.revokeObjectURL(nextPreviewUrl);
+  }, [selectedFile]);
+
+  useEffect(() => {
+    if (!results) {
+      setIsAnswerReviewOpen(false);
+      return undefined;
+    }
+
+    const scrollTimer = window.setTimeout(() => {
+      handleViewResults();
+    }, 250);
+
+    return () => window.clearTimeout(scrollTimer);
+  }, [results]);
+
+  useEffect(() => {
+    if (!isLoading && !isSavingTest) {
+      setLoadingStepIndex(0);
+      return undefined;
+    }
+
+    setLoadingStepIndex(0);
+    const stepTimer = window.setInterval(() => {
+      setLoadingStepIndex((current) => (current + 1) % loadingModal.steps.length);
+    }, 1250);
+
+    return () => window.clearInterval(stepTimer);
+  }, [isLoading, isSavingTest, loadingModal.steps.length]);
 
   useEffect(() => {
     if (!apiPreview || apiPreview.type !== "image") {
@@ -1348,13 +1840,32 @@ export default function App() {
     });
   };
 
+  const handleBackToUpload = () => {
+    uploadRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
+  const handleReviewAnswers = () => {
+    setIsAnswerReviewOpen(true);
+    window.setTimeout(() => {
+      answersRef.current?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }, 80);
+  };
+
   const handleStartOver = () => {
     setSelectedFile(null);
     setResults(null);
     setApiPreview(null);
     setError("");
     setUploadSuccess("");
+    setIsAnswerReviewOpen(false);
     setFileInputResetKey((current) => current + 1);
+    window.setTimeout(handleBackToUpload, 80);
   };
 
   const runEndpointAction = async (actionKey) => {
@@ -1452,7 +1963,9 @@ export default function App() {
     try {
       await loadAdminTests(adminCredentials);
       setIsAdminAuthenticated(true);
-      setAdminSuccess("Admin access unlocked.");
+      setIsAdminOpen(true);
+      setIsLoginModalOpen(false);
+      setAdminSuccess("You are signed in.");
     } catch (loginError) {
       setIsAdminAuthenticated(false);
       setSavedTests([]);
@@ -1463,6 +1976,15 @@ export default function App() {
           : "We could not sign you in. Please check the details and try again."
       );
     }
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdminAuthenticated(false);
+    setIsAdminOpen(false);
+    setIsLoginModalOpen(false);
+    setSavedTests([]);
+    setAdminError("");
+    setAdminSuccess("");
   };
 
   const handleSaveTest = async (event) => {
@@ -1552,26 +2074,6 @@ export default function App() {
       setIsSavingTest(false);
     }
   };
-  const loadingModal = isSavingTest
-    ? {
-        title: "Saving test",
-        copy: "We are reading the scoring guide and study materials. This can take a little while for larger PDFs.",
-        steps: [
-          "Reading the scoring guide",
-          "Preparing study recommendations",
-          "Saving the test for students",
-        ],
-      }
-    : {
-        title: "Building your score report",
-        copy: "We are reading the sheet, checking each section, and preparing your results.",
-        steps: [
-          "Reading answer marks",
-          "Scoring each section",
-          "Preparing study recommendations",
-        ],
-      };
-
   return (
     <div className="app-shell">
       <style>{styles}</style>
@@ -1586,13 +2088,47 @@ export default function App() {
             </div>
           </div>
 
-          <button
-            type="button"
-            className="quiet-button"
-            onClick={() => setIsAdminOpen((current) => !current)}
-          >
-            {isAdminOpen ? "Close Setup" : "Educator Login"}
-          </button>
+          <div className="header-actions">
+            {isAdminAuthenticated ? (
+              <>
+                <div className="educator-profile">
+                  <div className="profile-avatar" aria-hidden="true">
+                    {adminCredentials.username.slice(0, 1).toUpperCase() || "E"}
+                  </div>
+                  <div>
+                    <p className="profile-name">{adminCredentials.username}</p>
+                    <p className="profile-role">Educator</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="quiet-button"
+                  onClick={() => setIsAdminOpen((current) => !current)}
+                >
+                  {isAdminOpen ? "Close Setup" : "Test Setup"}
+                </button>
+                <button
+                  type="button"
+                  className="quiet-button"
+                  onClick={handleAdminLogout}
+                >
+                  Logout
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="quiet-button"
+                onClick={() => {
+                  setAdminError("");
+                  setAdminSuccess("");
+                  setIsLoginModalOpen(true);
+                }}
+              >
+                Educator Login
+              </button>
+            )}
+          </div>
         </header>
 
         {(isLoading || isSavingTest) ? (
@@ -1604,9 +2140,19 @@ export default function App() {
                 <p className="loading-copy">{loadingModal.copy}</p>
               </div>
               <div className="modal-steps">
-                {loadingModal.steps.map((step) => (
-                  <div key={step} className="modal-step">
-                    {step}
+                {loadingModal.steps.map((step, index) => (
+                  <div
+                    key={step}
+                    className={`modal-step ${
+                      index === loadingStepIndex
+                        ? "active"
+                        : index < loadingStepIndex
+                          ? "complete"
+                          : ""
+                    }`}
+                  >
+                    <span className="modal-step-dot" aria-hidden="true" />
+                    <span>{step}</span>
                   </div>
                 ))}
               </div>
@@ -1614,7 +2160,66 @@ export default function App() {
           </div>
         ) : null}
 
-        <section className="hero-card">
+        {isLoginModalOpen && !isAdminAuthenticated ? (
+          <div className="modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="educator-login-title">
+            <form className="login-modal" onSubmit={handleAdminLogin}>
+              <div className="modal-head">
+                <div>
+                  <h2 id="educator-login-title" className="panel-title">
+                    Educator Login
+                  </h2>
+                  <p className="panel-subtitle">
+                    Sign in to manage tests and study materials.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  className="icon-button"
+                  aria-label="Close educator login"
+                  onClick={() => setIsLoginModalOpen(false)}
+                >
+                  ×
+                </button>
+              </div>
+
+              <div className="field">
+                <label htmlFor="admin-username">Username</label>
+                <input
+                  id="admin-username"
+                  name="username"
+                  className="text-input"
+                  type="text"
+                  value={adminCredentials.username}
+                  onChange={handleAdminCredentialChange}
+                  placeholder="Username"
+                />
+              </div>
+
+              <div className="field">
+                <label htmlFor="admin-password">Password</label>
+                <input
+                  id="admin-password"
+                  name="password"
+                  className="text-input"
+                  type="password"
+                  value={adminCredentials.password}
+                  onChange={handleAdminCredentialChange}
+                  placeholder="Password"
+                />
+              </div>
+
+              {adminError ? <div className="message error">{adminError}</div> : null}
+
+              <div className="button-row">
+                <button type="submit" className="primary-button">
+                  Sign In
+                </button>
+              </div>
+            </form>
+          </div>
+        ) : null}
+
+        <section ref={uploadRef} className="hero-card">
           <div className="hero-top">
             <span className="eyebrow">Prepmedians ACT Results</span>
             <h1 className="hero-title">Upload your answer sheet and get your Prepmedians score report.</h1>
@@ -1683,6 +2288,55 @@ export default function App() {
                 </div>
               </div>
 
+              {selectedFilePreviewUrl ? (
+                <div className="photo-preview-card">
+                  <p className="photo-checklist-title">Preview your photo</p>
+                  <img
+                    className="photo-preview-image"
+                    src={selectedFilePreviewUrl}
+                    alt="Selected answer sheet preview"
+                  />
+                  <p className="helper-text">
+                    If the page looks cut off, blurry, or tilted here, try
+                    another photo before scoring.
+                  </p>
+                </div>
+              ) : null}
+
+              <div className="photo-checklist" aria-label="Photo checklist">
+                <p className="photo-checklist-title">Before you upload, check the photo:</p>
+                <div className="photo-checklist-grid">
+                  {[
+                    "Full page visible",
+                    "Good lighting",
+                    "No blur",
+                    "Sheet not tilted",
+                    "Bubbles filled darkly",
+                  ].map((item) => (
+                    <div key={item} className="photo-check-item">
+                      <span className="photo-check-icon" aria-hidden="true">
+                        ✓
+                      </span>
+                      <span>{item}</span>
+                    </div>
+                  ))}
+                </div>
+                <div className="photo-guide" aria-hidden="true">
+                  <div className="photo-example">
+                    <div className="sample-photo">
+                      <div className="sample-sheet" />
+                    </div>
+                    <p className="photo-example-label">Good photo</p>
+                  </div>
+                  <div className="photo-example">
+                    <div className="sample-photo bad">
+                      <div className="sample-sheet" />
+                    </div>
+                    <p className="photo-example-label">Avoid blurry or tilted photos</p>
+                  </div>
+                </div>
+              </div>
+
               {selectedTest ? (
                 <div className="saved-test-sections">
                   {SECTION_CONFIG.map(({ key, title }) => {
@@ -1716,7 +2370,7 @@ export default function App() {
                       className="secondary-button"
                       onClick={handleStartOver}
                     >
-                      Score Another Sheet
+                      Start a New Scan
                     </button>
                   </>
                 ) : (
@@ -1793,6 +2447,30 @@ export default function App() {
                 <p className="panel-subtitle">
                   {selectedTest?.name || "Selected test"} results are ready.
                 </p>
+                <div className="scan-summary">
+                  <div className="scan-summary-card">
+                    <div className="scan-summary-label">Answers found</div>
+                    <div className="scan-summary-value">
+                      {resultReadSummary.answered}
+                    </div>
+                  </div>
+                  <div className="scan-summary-card">
+                    <div className="scan-summary-label">Blanks</div>
+                    <div className="scan-summary-value">
+                      {resultReadSummary.blank}
+                    </div>
+                  </div>
+                  <div className="scan-summary-card">
+                    <div className="scan-summary-label">Read quality</div>
+                    <div className="scan-summary-value">
+                      {resultReadSummary.isLowConfidence
+                        ? "Needs review"
+                        : resultReadSummary.hasManyBlanks
+                          ? "Some blanks"
+                          : "Looks good"}
+                    </div>
+                  </div>
+                </div>
               </div>
               <div className="score-kpis">
                 {scoreSummaryItems.map((item) => (
@@ -1807,7 +2485,68 @@ export default function App() {
               </div>
             </section>
 
-            <section className="results-grid">
+            <section className="results-action-bar">
+              <p className="results-action-copy">
+                Want to double-check the scan? You can review the detected
+                answers or start over with a clearer photo.
+              </p>
+              <div className="button-row">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={handleReviewAnswers}
+                >
+                  Review Answers
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleBackToUpload}
+                >
+                  Back to Upload
+                </button>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={handleStartOver}
+                >
+                  Start a New Scan
+                </button>
+              </div>
+            </section>
+
+            {results._status === "partial" || results._warnings?.length ? (
+              <section className="message warning">
+                <strong>Some answers were hard to read.</strong> Review the
+                answer grid before trusting the score.
+                {results._warnings?.length ? (
+                  <ul className="scan-warning-list">
+                    {results._warnings.map((warning, index) => (
+                      <li key={`${warning}-${index}`}>{warning}</li>
+                    ))}
+                  </ul>
+                ) : null}
+              </section>
+            ) : null}
+
+            {resultReadSummary.hasManyBlanks && !resultReadSummary.isLowConfidence ? (
+              <section className="message warning">
+                A lot of blanks were detected. If that does not match your
+                sheet, try another photo before relying on the score.
+              </section>
+            ) : null}
+
+            {resultReadSummary.isLowConfidence ? (
+              <section className="low-confidence-card">
+                <strong>We could not read enough of this sheet to score it confidently.</strong>
+                <span>
+                  Try a clearer photo with the full page visible, then scan it
+                  again. You can still review the answers we found below.
+                </span>
+              </section>
+            ) : null}
+
+            <section ref={answersRef} className="results-grid">
               {practiceTest1ScoringState.error ? (
                 <div className="message error results-banner">
                   {practiceTest1ScoringState.error}
@@ -1819,6 +2558,7 @@ export default function App() {
                 const counts = countAnswers(answers);
                 const sectionScore = practiceTest1ScoringState.scores?.[key] || null;
                 const categoryScores = getDisplayedCategoryScores(key, sectionScore);
+                const sectionStatus = getSectionScanStatus(counts, total);
 
                 return (
                   <article key={key} className="result-card">
@@ -1829,12 +2569,12 @@ export default function App() {
                           {counts.answered} answered / {counts.blank} blank
                         </div>
                       </div>
-                      <span className="status-chip">
-                        {answers.length || total} questions
+                      <span className={`section-status ${sectionStatus.className}`}>
+                        {sectionStatus.label}
                       </span>
                     </div>
 
-                    {sectionScore ? (
+                    {sectionScore && !resultReadSummary.isLowConfidence ? (
                       <div className="score-summary">
                         <div className="score-overview">
                           <div className="score-pill">
@@ -1868,8 +2608,18 @@ export default function App() {
                       </div>
                     ) : null}
 
-                    <details className="answer-review">
+                    <details
+                      className="answer-review"
+                      open={isAnswerReviewOpen}
+                      onToggle={(event) =>
+                        setIsAnswerReviewOpen(event.currentTarget.open)
+                      }
+                    >
                       <summary>Review answers we found</summary>
+                      <p className="helper-text">
+                        A dash means we could not detect a clear mark for that
+                        question.
+                      </p>
                       <div className="answers-grid">
                         {answers.map((value, index) => {
                           const questionNumber = index + 1;
@@ -1897,7 +2647,7 @@ export default function App() {
               })}
             </section>
 
-            {studyRecommendations ? (
+            {studyRecommendations && !resultReadSummary.isLowConfidence ? (
               <section className="study-plan-shell">
                 <div className="panel-card">
                   <div className="study-plan-header">
@@ -2005,7 +2755,7 @@ export default function App() {
           </>
         ) : null}
 
-        {apiPreview && isAdminOpen ? (
+        {apiPreview && isAdminOpen && isAdminAuthenticated ? (
           <section className="preview-card">
             <div className="panel-head">
               <div>
@@ -2033,7 +2783,7 @@ export default function App() {
           </section>
         ) : null}
 
-        {!results && (!apiPreview || !isAdminOpen) ? (
+        {!results && (!apiPreview || !isAdminOpen || !isAdminAuthenticated) ? (
           <section className="panel-card">
             <div className="empty-state">
               Upload your answer sheet to get your score report and study plan.
@@ -2041,7 +2791,7 @@ export default function App() {
           </section>
         ) : null}
 
-        {isAdminOpen ? (
+        {isAdminOpen && isAdminAuthenticated ? (
           <section className="admin-grid">
             <div className="panel-card stack">
               <div className="panel-head">
@@ -2053,57 +2803,11 @@ export default function App() {
                   </p>
                 </div>
                 <span className="status-chip">
-                  {isAdminAuthenticated ? "Unlocked" : "Locked"}
+                  Ready
                 </span>
               </div>
 
-              {!isAdminAuthenticated ? (
-                <form className="stack" onSubmit={handleAdminLogin}>
-                  <div className="field">
-                    <label htmlFor="admin-username">Username</label>
-                    <input
-                      id="admin-username"
-                      name="username"
-                      className="text-input"
-                      type="text"
-                      value={adminCredentials.username}
-                      onChange={handleAdminCredentialChange}
-                      placeholder="Username"
-                    />
-                  </div>
-
-                  <div className="field">
-                    <label htmlFor="admin-password">Password</label>
-                    <input
-                      id="admin-password"
-                      name="password"
-                      className="text-input"
-                      type="password"
-                      value={adminCredentials.password}
-                      onChange={handleAdminCredentialChange}
-                      placeholder="Password"
-                    />
-                  </div>
-
-                  {adminError ? (
-                    <div className="message error">{adminError}</div>
-                  ) : null}
-                  {adminSuccess ? (
-                    <div className="message success">{adminSuccess}</div>
-                  ) : null}
-
-                  <div className="button-row">
-                    <button type="submit" className="primary-button">
-                      Sign In
-                    </button>
-                  </div>
-
-                  <p className="helper-text">
-                    Use the admin sign-in details for this Prepmedians app.
-                  </p>
-                </form>
-              ) : (
-                <form className="stack" onSubmit={handleSaveTest}>
+              <form className="stack" onSubmit={handleSaveTest}>
                   <div className="field">
                     <label htmlFor="test-name">Test name</label>
                     <input
@@ -2188,8 +2892,7 @@ export default function App() {
                     PDFs. The app will prepare a shared test that students can
                     choose from.
                   </p>
-                </form>
-              )}
+              </form>
             </div>
 
             <div className="panel-card stack">
@@ -2201,11 +2904,11 @@ export default function App() {
                   </p>
                 </div>
                 <span className="status-chip">
-                  {isAdminAuthenticated ? savedTests.length : availableTests.length} total
+                  {savedTests.length} total
                 </span>
               </div>
 
-              {isAdminAuthenticated && savedTests.length ? (
+              {savedTests.length ? (
                 <div className="saved-tests">
                   {savedTests.map((test) => (
                     <article key={test.id} className="saved-test-card">
