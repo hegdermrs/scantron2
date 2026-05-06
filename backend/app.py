@@ -46,6 +46,7 @@ ANTHROPIC_MODEL = os.getenv(
 PARSE_WEBHOOK_URL = os.getenv(
     "PARSE_WEBHOOK_URL", "https://rmrs.app.n8n.cloud/webhook/omr-upload"
 )
+MAX_PROCESSING_DIMENSION = int(os.getenv("MAX_PROCESSING_DIMENSION", "2200"))
 
 app = FastAPI(title="OMR Pipeline")
 security = HTTPBasic()
@@ -137,6 +138,16 @@ def read_image_from_upload(upload: UploadFile) -> np.ndarray:
 def preprocess_for_ai(img: np.ndarray) -> np.ndarray:
     if img.shape[1] > img.shape[0]:
         img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+
+    height, width = img.shape[:2]
+    largest_dimension = max(height, width)
+    if largest_dimension > MAX_PROCESSING_DIMENSION:
+        scale = MAX_PROCESSING_DIMENSION / largest_dimension
+        img = cv2.resize(
+            img,
+            (int(width * scale), int(height * scale)),
+            interpolation=cv2.INTER_AREA,
+        )
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
@@ -316,7 +327,7 @@ def split_omr(gray):
             results.append(
                 {
                     "section": name,
-                    "column": column_index,
+                    "column": column_index + 1,
                     "image": encode_crop_base64(crop),
                 }
             )
@@ -1234,9 +1245,37 @@ async def parse_omr_route(
 
 @app.post("/split-omr")
 async def split_route(file: UploadFile = File(...)):
-    img = read_image_from_upload(file)
-    gray = preprocess_for_ai(img)
-    blocks, debug_info = split_omr(gray)
+    try:
+        img = read_image_from_upload(file)
+        gray = preprocess_for_ai(img)
+        blocks, debug_info = split_omr(gray)
+    except HTTPException as exc:
+        if exc.status_code < 500:
+            raise
+
+        return {
+            "count": 0,
+            "dividers": [],
+            "inferred_bottom": None,
+            "bands": {},
+            "blocks": [],
+            "_status": "partial",
+            "_warnings": [
+                f"We could not confidently find all answer columns on this sheet: {exc.detail}"
+            ],
+        }
+    except Exception as exc:
+        return {
+            "count": 0,
+            "dividers": [],
+            "inferred_bottom": None,
+            "bands": {},
+            "blocks": [],
+            "_status": "partial",
+            "_warnings": [
+                f"We could not confidently split this answer sheet: {exc}"
+            ],
+        }
 
     return {
         "count": len(blocks),
@@ -1244,6 +1283,10 @@ async def split_route(file: UploadFile = File(...)):
         "inferred_bottom": debug_info["bottom"]["y"],
         "bands": debug_info["bands"],
         "blocks": blocks,
+        "_status": "ok" if len(blocks) >= 20 else "partial",
+        "_warnings": []
+        if len(blocks) >= 20
+        else [f"Expected 20 answer columns but found {len(blocks)}."],
     }
 
 
