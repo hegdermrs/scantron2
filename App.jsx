@@ -47,19 +47,19 @@ const EVEN_LABELS = {
 
 const styles = `
   :root {
-    --bg: #eef3f5;
-    --bg-accent: #dbe7ea;
-    --surface: #ffffff;
-    --surface-soft: #f7fafb;
+    --bg: #edf5f1;
+    --bg-accent: #d7e7df;
+    --surface: rgba(255, 255, 255, 0.88);
+    --surface-soft: #f5faf8;
     --surface-strong: #ffffff;
-    --line: rgba(15, 23, 42, 0.1);
-    --text: #111827;
-    --muted: #64748b;
-    --shadow: 0 22px 70px rgba(15, 23, 42, 0.12);
-    --shadow-soft: 0 10px 28px rgba(15, 23, 42, 0.08);
-    --accent: #0f766e;
-    --accent-strong: #115e59;
-    --accent-soft: #d9f5ef;
+    --line: rgba(16, 40, 35, 0.1);
+    --text: #10231f;
+    --muted: #64756f;
+    --shadow: 0 28px 90px rgba(20, 54, 47, 0.16);
+    --shadow-soft: 0 14px 38px rgba(20, 54, 47, 0.1);
+    --accent: #0d7c66;
+    --accent-strong: #075f50;
+    --accent-soft: #d9f4ea;
     --info: #2563eb;
     --info-soft: #dbeafe;
     --warning: #b45309;
@@ -76,10 +76,11 @@ const styles = `
 
   body {
     margin: 0;
-    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+    font-family: "Aptos", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     background:
-      linear-gradient(180deg, rgba(255, 255, 255, 0.82) 0%, rgba(238, 243, 245, 0) 360px),
-      linear-gradient(135deg, var(--bg) 0%, #f8fbfc 48%, var(--bg-accent) 100%);
+      radial-gradient(circle at 8% -8%, rgba(13, 124, 102, 0.22), transparent 28rem),
+      radial-gradient(circle at 88% 2%, rgba(180, 83, 9, 0.16), transparent 24rem),
+      linear-gradient(135deg, var(--bg) 0%, #fbfdfb 48%, var(--bg-accent) 100%);
     color: var(--text);
   }
 
@@ -91,16 +92,28 @@ const styles = `
 
   .app-shell {
     min-height: 100vh;
-    padding: 24px 20px 56px;
+    padding: 18px 20px 52px;
     position: relative;
     overflow: hidden;
   }
 
+  .app-shell::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image:
+      linear-gradient(rgba(16, 35, 31, 0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(16, 35, 31, 0.035) 1px, transparent 1px);
+    background-size: 44px 44px;
+    mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.75), transparent 74%);
+  }
+
   .app-container {
-    width: min(1200px, 100%);
+    width: min(1160px, 100%);
     margin: 0 auto;
     display: grid;
-    gap: 20px;
+    gap: 16px;
     position: relative;
     z-index: 1;
   }
@@ -110,6 +123,15 @@ const styles = `
     align-items: center;
     justify-content: space-between;
     gap: 16px;
+    position: sticky;
+    top: 14px;
+    z-index: 30;
+    padding: 10px 12px;
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, 0.72);
+    box-shadow: 0 18px 50px rgba(20, 54, 47, 0.1);
+    backdrop-filter: blur(18px);
   }
 
   .header-actions {
@@ -163,10 +185,10 @@ const styles = `
   }
 
   .brand-logo {
-    width: 54px;
-    height: 54px;
+    width: 48px;
+    height: 48px;
     object-fit: contain;
-    border-radius: 8px;
+    border-radius: 16px;
     background: #ffffff;
     box-shadow: var(--shadow-soft);
   }
@@ -191,19 +213,40 @@ const styles = `
     background: var(--surface);
     border: 1px solid var(--line);
     box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(18px);
   }
 
   .hero-card {
-    border-radius: 8px;
-    padding: 24px;
+    position: relative;
+    overflow: hidden;
+    border-radius: 28px;
+    padding: clamp(22px, 3vw, 34px);
     display: grid;
-    gap: 24px;
+    gap: 22px;
+    background:
+      linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(245, 250, 248, 0.88)),
+      radial-gradient(circle at 92% 12%, rgba(13, 124, 102, 0.16), transparent 22rem);
     animation: rise 0.7s ease both;
+  }
+
+  .hero-card::after {
+    content: "";
+    position: absolute;
+    width: 260px;
+    height: 260px;
+    right: -92px;
+    top: -110px;
+    border-radius: 999px;
+    background: rgba(13, 124, 102, 0.12);
+    filter: blur(2px);
+    animation: breathe 7s ease-in-out infinite;
   }
 
   .hero-top {
     display: grid;
     gap: 12px;
+    position: relative;
+    z-index: 1;
   }
 
   .eyebrow {
@@ -211,50 +254,90 @@ const styles = `
     align-items: center;
     gap: 8px;
     width: fit-content;
-    padding: 8px 12px;
-    border-radius: 8px;
-    background: rgba(31, 111, 95, 0.1);
+    padding: 7px 11px;
+    border-radius: 999px;
+    background: rgba(13, 124, 102, 0.1);
     color: var(--accent);
-    font-size: 0.85rem;
-    font-weight: 700;
+    font-size: 0.76rem;
+    font-weight: 900;
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
 
   .hero-title {
     margin: 0;
-    font-size: 2.45rem;
-    line-height: 1.04;
-    letter-spacing: 0;
+    max-width: 840px;
+    font-size: clamp(2.15rem, 4vw, 4.15rem);
+    line-height: 0.96;
+    letter-spacing: -0.045em;
   }
 
   .hero-copy {
     margin: 0;
     max-width: 720px;
     color: var(--muted);
-    font-size: 1.02rem;
+    font-size: 1.05rem;
     line-height: 1.6;
+  }
+
+  .hero-highlights {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 9px;
+    margin-top: 4px;
+  }
+
+  .hero-highlight {
+    padding: 9px 11px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.72);
+    border: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.86rem;
+    font-weight: 800;
   }
 
   .hero-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
-    gap: 20px;
+    grid-template-columns: minmax(0, 1.08fr) minmax(310px, 0.82fr);
+    gap: 16px;
     align-items: start;
+    position: relative;
+    z-index: 1;
   }
 
   .panel-card {
-    border-radius: 8px;
-    padding: 22px;
+    border-radius: 22px;
+    padding: 18px;
     animation: rise 0.85s ease both;
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  }
+
+  .panel-card:hover,
+  .result-card:hover,
+  .saved-test-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow);
+    border-color: rgba(13, 124, 102, 0.16);
+  }
+
+  .upload-card {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(246, 251, 249, 0.92));
+  }
+
+  .insight-card {
+    background:
+      linear-gradient(180deg, rgba(255, 255, 255, 0.88), rgba(245, 250, 248, 0.82));
+    animation-delay: 0.08s;
   }
 
   .panel-head {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
-    gap: 16px;
-    margin-bottom: 18px;
+    gap: 14px;
+    margin-bottom: 14px;
   }
 
   .panel-title {
@@ -271,8 +354,8 @@ const styles = `
 
   .status-chip {
     padding: 8px 12px;
-    border-radius: 8px;
-    background: rgba(31, 111, 95, 0.1);
+    border-radius: 999px;
+    background: rgba(13, 124, 102, 0.1);
     color: var(--accent);
     font-weight: 700;
     font-size: 0.82rem;
@@ -281,7 +364,7 @@ const styles = `
 
   .stack {
     display: grid;
-    gap: 14px;
+    gap: 12px;
   }
 
   .field {
@@ -298,9 +381,9 @@ const styles = `
   .textarea-input,
   .file-input {
     width: 100%;
-    border-radius: 8px;
+    border-radius: 14px;
     border: 1px solid var(--line);
-    padding: 14px 16px;
+    padding: 13px 14px;
     background: var(--surface-strong);
     color: var(--text);
     transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
@@ -338,7 +421,7 @@ const styles = `
   .file-input::file-selector-button {
     margin-right: 12px;
     border: 0;
-    border-radius: 8px;
+    border-radius: 12px;
     padding: 10px 12px;
     background: var(--info-soft);
     color: var(--info);
@@ -355,8 +438,8 @@ const styles = `
   .primary-button,
   .secondary-button {
     border: 0;
-    border-radius: 8px;
-    padding: 14px 18px;
+    border-radius: 14px;
+    padding: 13px 17px;
     cursor: pointer;
     transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
     font-weight: 700;
@@ -369,13 +452,13 @@ const styles = `
   }
 
   .secondary-button {
-    background: rgba(32, 28, 23, 0.08);
+    background: rgba(16, 35, 31, 0.08);
     color: var(--text);
   }
 
   .primary-button:hover,
   .secondary-button:hover {
-    transform: translateY(-1px);
+    transform: translateY(-2px);
   }
 
   .primary-button:disabled,
@@ -395,9 +478,9 @@ const styles = `
 
   .photo-checklist {
     display: grid;
-    gap: 10px;
-    padding: 14px;
-    border-radius: 8px;
+    gap: 9px;
+    padding: 12px;
+    border-radius: 18px;
     background: var(--surface-soft);
     border: 1px solid var(--line);
   }
@@ -423,14 +506,14 @@ const styles = `
   }
 
   .photo-check-icon {
-    width: 18px;
-    height: 18px;
+    width: 24px;
+    height: 20px;
     border-radius: 999px;
     display: grid;
     place-items: center;
     background: var(--accent-soft);
     color: var(--accent-strong);
-    font-size: 0.72rem;
+    font-size: 0.62rem;
     font-weight: 900;
     flex: 0 0 auto;
   }
@@ -439,7 +522,7 @@ const styles = `
     display: grid;
     gap: 10px;
     padding: 12px;
-    border-radius: 8px;
+    border-radius: 18px;
     background: var(--surface-soft);
     border: 1px solid var(--line);
   }
@@ -448,7 +531,7 @@ const styles = `
     width: 100%;
     max-height: 220px;
     object-fit: contain;
-    border-radius: 8px;
+    border-radius: 14px;
     background: #ffffff;
     border: 1px solid var(--line);
   }
@@ -464,7 +547,7 @@ const styles = `
     display: grid;
     gap: 8px;
     padding: 10px;
-    border-radius: 8px;
+    border-radius: 14px;
     background: #ffffff;
     border: 1px solid var(--line);
   }
@@ -478,7 +561,7 @@ const styles = `
 
   .sample-photo {
     height: 86px;
-    border-radius: 8px;
+    border-radius: 12px;
     display: grid;
     place-items: center;
     background: linear-gradient(135deg, #e8f3f1, #f9fbfc);
@@ -507,7 +590,7 @@ const styles = `
   }
 
   .message {
-    border-radius: 8px;
+    border-radius: 16px;
     padding: 14px 16px;
     font-size: 0.94rem;
     line-height: 1.5;
@@ -531,15 +614,28 @@ const styles = `
   .results-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
+    gap: 16px;
   }
 
   .result-card {
-    border-radius: 8px;
-    padding: 20px;
+    border-radius: 22px;
+    padding: 18px;
     display: grid;
     gap: 18px;
     animation: rise 0.75s ease both;
+    transition: transform 0.22s ease, box-shadow 0.22s ease, border-color 0.22s ease;
+  }
+
+  .results-grid .result-card:nth-child(2) {
+    animation-delay: 0.04s;
+  }
+
+  .results-grid .result-card:nth-child(3) {
+    animation-delay: 0.08s;
+  }
+
+  .results-grid .result-card:nth-child(4) {
+    animation-delay: 0.12s;
   }
 
   .result-head {
@@ -561,15 +657,15 @@ const styles = `
 
   .answers-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(88px, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+    gap: 8px;
   }
 
   .score-summary {
     display: grid;
     gap: 14px;
     padding: 16px;
-    border-radius: 8px;
+    border-radius: 18px;
     background: rgba(31, 111, 95, 0.08);
     border: 1px solid rgba(31, 111, 95, 0.14);
   }
@@ -583,7 +679,7 @@ const styles = `
   .score-pill,
   .score-category-card {
     border-radius: 8px;
-    padding: 12px 14px;
+    padding: 11px 12px;
     background: rgba(255, 255, 255, 0.72);
     border: 1px solid rgba(59, 48, 36, 0.08);
   }
@@ -624,13 +720,13 @@ const styles = `
 
   .study-plan-shell {
     display: grid;
-    gap: 18px;
+    gap: 16px;
   }
 
   .study-plan-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 18px;
+    gap: 16px;
     align-items: start;
   }
 
@@ -663,7 +759,7 @@ const styles = `
   .study-category-card,
   .study-strategy-card,
   .study-module-card {
-    border-radius: 8px;
+    border-radius: 16px;
     border: 1px solid rgba(59, 48, 36, 0.08);
     background: rgba(255, 255, 255, 0.72);
   }
@@ -709,7 +805,7 @@ const styles = `
 
   .study-priority {
     padding: 7px 10px;
-    border-radius: 8px;
+    border-radius: 999px;
     font-size: 0.76rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -738,9 +834,9 @@ const styles = `
   }
 
   .answer-card {
-    border-radius: 8px;
-    padding: 12px;
-    min-height: 72px;
+    border-radius: 16px;
+    padding: 10px;
+    min-height: 66px;
     display: grid;
     align-content: center;
     gap: 6px;
@@ -750,7 +846,7 @@ const styles = `
 
   .answer-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 12px 24px rgba(41, 27, 15, 0.08);
+    box-shadow: 0 12px 24px rgba(20, 54, 47, 0.08);
     border-color: rgba(31, 111, 95, 0.18);
   }
 
@@ -787,8 +883,8 @@ const styles = `
   }
 
   .preview-card {
-    border-radius: 8px;
-    padding: 22px;
+    border-radius: 22px;
+    padding: 18px;
     display: grid;
     gap: 16px;
     background: var(--surface);
@@ -828,10 +924,17 @@ const styles = `
   .endpoint-item {
     display: grid;
     gap: 6px;
-    padding: 14px 16px;
-    border-radius: 8px;
+    padding: 13px 14px;
+    border-radius: 18px;
     background: var(--surface-soft);
     border: 1px solid rgba(59, 48, 36, 0.08);
+    transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+  }
+
+  .endpoint-item:hover {
+    transform: translateY(-2px);
+    border-color: rgba(13, 124, 102, 0.2);
+    background: #ffffff;
   }
 
   .endpoint-item strong {
@@ -845,8 +948,8 @@ const styles = `
   }
 
   .saved-test-card {
-    border-radius: 8px;
-    padding: 18px;
+    border-radius: 18px;
+    padding: 16px;
     display: grid;
     gap: 12px;
   }
@@ -868,7 +971,7 @@ const styles = `
   }
 
   .saved-section-pill {
-    border-radius: 8px;
+    border-radius: 999px;
     padding: 10px 12px;
     background: rgba(32, 28, 23, 0.05);
     font-size: 0.88rem;
@@ -877,7 +980,7 @@ const styles = `
 
   .empty-state {
     padding: 26px 18px;
-    border-radius: 8px;
+    border-radius: 22px;
     border: 1px dashed rgba(59, 48, 36, 0.18);
     color: var(--muted);
     text-align: center;
@@ -904,6 +1007,7 @@ const styles = `
     gap: 18px;
     align-items: center;
     scroll-margin-top: 24px;
+    border-radius: 24px;
   }
 
   .results-action-bar {
@@ -915,7 +1019,7 @@ const styles = `
     justify-content: space-between;
     gap: 12px;
     padding: 12px;
-    border-radius: 8px;
+    border-radius: 18px;
     background: rgba(255, 255, 255, 0.92);
     border: 1px solid var(--line);
     box-shadow: var(--shadow-soft);
@@ -937,7 +1041,7 @@ const styles = `
   .score-kpi {
     padding: 14px;
     border: 1px solid var(--line);
-    border-radius: 8px;
+    border-radius: 18px;
     background: var(--surface-soft);
   }
 
@@ -965,7 +1069,7 @@ const styles = `
 
   .scan-summary-card {
     padding: 12px;
-    border-radius: 8px;
+    border-radius: 18px;
     background: var(--surface-soft);
     border: 1px solid var(--line);
   }
@@ -1010,7 +1114,7 @@ const styles = `
     display: grid;
     gap: 10px;
     padding: 16px;
-    border-radius: 8px;
+    border-radius: 18px;
     background: var(--warning-soft);
     color: var(--warning);
   }
@@ -1176,6 +1280,30 @@ const styles = `
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+
+  @keyframes breathe {
+    0%,
+    100% {
+      transform: scale(1) translate3d(0, 0, 0);
+      opacity: 0.7;
+    }
+
+    50% {
+      transform: scale(1.08) translate3d(-10px, 12px, 0);
+      opacity: 1;
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      scroll-behavior: auto !important;
+      transition-duration: 0.001ms !important;
     }
   }
 
@@ -2178,7 +2306,7 @@ export default function App() {
                   aria-label="Close educator login"
                   onClick={() => setIsLoginModalOpen(false)}
                 >
-                  ×
+                  x
                 </button>
               </div>
 
@@ -2228,10 +2356,15 @@ export default function App() {
               your section scores, category breakdowns, and recommended study
               plan in one place.
             </p>
+            <div className="hero-highlights" aria-label="Report highlights">
+              <span className="hero-highlight">Fast score report</span>
+              <span className="hero-highlight">Personalized study plan</span>
+              <span className="hero-highlight">Built for ACT practice</span>
+            </div>
           </div>
 
           <div className="hero-grid">
-            <form className="panel-card stack" onSubmit={handleUpload}>
+            <form className="panel-card upload-card stack" onSubmit={handleUpload}>
               <div className="panel-head">
                 <div>
                   <h2 className="panel-title">Score Your Test</h2>
@@ -2315,7 +2448,7 @@ export default function App() {
                   ].map((item) => (
                     <div key={item} className="photo-check-item">
                       <span className="photo-check-icon" aria-hidden="true">
-                        ✓
+                        OK
                       </span>
                       <span>{item}</span>
                     </div>
@@ -2336,19 +2469,6 @@ export default function App() {
                   </div>
                 </div>
               </div>
-
-              {selectedTest ? (
-                <div className="saved-test-sections">
-                  {SECTION_CONFIG.map(({ key, title }) => {
-                    const counts = selectedTest.sectionCounts?.[key];
-                    return (
-                      <div key={key} className="saved-section-pill">
-                        {title}: {counts?.total || 0} questions
-                      </div>
-                    );
-                  })}
-                </div>
-              ) : null}
 
               {error ? <div className="message error">{error}</div> : null}
               {uploadSuccess ? (
@@ -2390,7 +2510,7 @@ export default function App() {
               </p>
             </form>
 
-            <div className="panel-card stack">
+            <div className="panel-card insight-card stack">
               <div className="panel-head">
                 <div>
                   <h2 className="panel-title">What You'll Get</h2>
