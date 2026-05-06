@@ -15,20 +15,10 @@ const ADMIN_TESTS_ENDPOINT = `${BACKEND_BASE_URL}/admin/tests`;
 const ADMIN_IMPORT_ENDPOINT = `${BACKEND_BASE_URL}/admin/tests/import-pdf`;
 
 const API_ENDPOINTS = {
-  preprocess: {
-    label: "Preprocess OMR",
-    url: `${BACKEND_BASE_URL}/preprocess-omr`,
-    successMessage: "Preprocess request completed.",
-  },
-  split: {
-    label: "Split OMR",
-    url: `${BACKEND_BASE_URL}/split-omr`,
-    successMessage: "Split request completed.",
-  },
   parse: {
-    label: "Parse Answers",
+    label: "Score Report",
     url: `${BACKEND_BASE_URL}/parse-omr`,
-    successMessage: "Answer parsing completed.",
+    successMessage: "Your score report is ready.",
   },
 };
 const ADMIN_USERNAME = import.meta.env.VITE_ADMIN_USERNAME || "admin";
@@ -57,21 +47,27 @@ const EVEN_LABELS = {
 
 const styles = `
   :root {
-    --bg: #f4efe7;
-    --bg-accent: #e5ddd1;
-    --surface: rgba(255, 255, 255, 0.78);
-    --surface-strong: rgba(255, 255, 255, 0.92);
-    --line: rgba(59, 48, 36, 0.12);
-    --text: #211b15;
-    --muted: #766657;
-    --shadow: 0 24px 80px rgba(41, 27, 15, 0.12);
-    --shadow-soft: 0 16px 40px rgba(41, 27, 15, 0.08);
-    --accent: #1f6f5f;
-    --accent-soft: #d8eee9;
-    --danger: #b64747;
-    --danger-soft: #f8e0e0;
-    --blank: #c4b8aa;
-    --filled: #201c17;
+    --bg: #eef3f5;
+    --bg-accent: #dbe7ea;
+    --surface: #ffffff;
+    --surface-soft: #f7fafb;
+    --surface-strong: #ffffff;
+    --line: rgba(15, 23, 42, 0.1);
+    --text: #111827;
+    --muted: #64748b;
+    --shadow: 0 22px 70px rgba(15, 23, 42, 0.12);
+    --shadow-soft: 0 10px 28px rgba(15, 23, 42, 0.08);
+    --accent: #0f766e;
+    --accent-strong: #115e59;
+    --accent-soft: #d9f5ef;
+    --info: #2563eb;
+    --info-soft: #dbeafe;
+    --warning: #b45309;
+    --warning-soft: #fef3c7;
+    --danger: #b91c1c;
+    --danger-soft: #fee2e2;
+    --blank: #94a3b8;
+    --filled: #0f172a;
   }
 
   * {
@@ -82,9 +78,8 @@ const styles = `
     margin: 0;
     font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
     background:
-      radial-gradient(circle at top left, rgba(255, 255, 255, 0.95), transparent 30%),
-      radial-gradient(circle at bottom right, rgba(31, 111, 95, 0.18), transparent 28%),
-      linear-gradient(135deg, var(--bg) 0%, #f8f5ef 44%, var(--bg-accent) 100%);
+      linear-gradient(180deg, rgba(255, 255, 255, 0.82) 0%, rgba(238, 243, 245, 0) 360px),
+      linear-gradient(135deg, var(--bg) 0%, #f8fbfc 48%, var(--bg-accent) 100%);
     color: var(--text);
   }
 
@@ -96,46 +91,53 @@ const styles = `
 
   .app-shell {
     min-height: 100vh;
-    padding: 32px 20px 56px;
+    padding: 24px 20px 56px;
     position: relative;
     overflow: hidden;
-  }
-
-  .app-shell::before,
-  .app-shell::after {
-    content: "";
-    position: absolute;
-    border-radius: 999px;
-    filter: blur(4px);
-    opacity: 0.65;
-    pointer-events: none;
-  }
-
-  .app-shell::before {
-    width: 280px;
-    height: 280px;
-    top: -70px;
-    right: -80px;
-    background: rgba(31, 111, 95, 0.12);
-    animation: float 8s ease-in-out infinite;
-  }
-
-  .app-shell::after {
-    width: 220px;
-    height: 220px;
-    bottom: 80px;
-    left: -70px;
-    background: rgba(158, 113, 54, 0.08);
-    animation: float 10s ease-in-out infinite reverse;
   }
 
   .app-container {
     width: min(1200px, 100%);
     margin: 0 auto;
     display: grid;
-    gap: 24px;
+    gap: 20px;
     position: relative;
     z-index: 1;
+  }
+
+  .app-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+  }
+
+  .brand-mark {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    min-width: 0;
+  }
+
+  .brand-logo {
+    width: 54px;
+    height: 54px;
+    object-fit: contain;
+    border-radius: 8px;
+    background: #ffffff;
+    box-shadow: var(--shadow-soft);
+  }
+
+  .brand-title {
+    margin: 0;
+    font-size: 1rem;
+    line-height: 1.2;
+  }
+
+  .brand-subtitle {
+    margin: 2px 0 0;
+    color: var(--muted);
+    font-size: 0.82rem;
   }
 
   .hero-card,
@@ -144,14 +146,13 @@ const styles = `
   .answer-card,
   .saved-test-card {
     background: var(--surface);
-    backdrop-filter: blur(18px);
-    border: 1px solid rgba(255, 255, 255, 0.58);
+    border: 1px solid var(--line);
     box-shadow: var(--shadow-soft);
   }
 
   .hero-card {
-    border-radius: 28px;
-    padding: 28px;
+    border-radius: 8px;
+    padding: 24px;
     display: grid;
     gap: 24px;
     animation: rise 0.7s ease both;
@@ -168,7 +169,7 @@ const styles = `
     gap: 8px;
     width: fit-content;
     padding: 8px 12px;
-    border-radius: 999px;
+    border-radius: 8px;
     background: rgba(31, 111, 95, 0.1);
     color: var(--accent);
     font-size: 0.85rem;
@@ -179,9 +180,9 @@ const styles = `
 
   .hero-title {
     margin: 0;
-    font-size: clamp(2rem, 4vw, 3.6rem);
-    line-height: 0.95;
-    letter-spacing: -0.04em;
+    font-size: 2.45rem;
+    line-height: 1.04;
+    letter-spacing: 0;
   }
 
   .hero-copy {
@@ -194,12 +195,13 @@ const styles = `
 
   .hero-grid {
     display: grid;
-    grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.75fr);
+    grid-template-columns: minmax(0, 1.05fr) minmax(320px, 0.95fr);
     gap: 20px;
+    align-items: start;
   }
 
   .panel-card {
-    border-radius: 24px;
+    border-radius: 8px;
     padding: 22px;
     animation: rise 0.85s ease both;
   }
@@ -226,7 +228,7 @@ const styles = `
 
   .status-chip {
     padding: 8px 12px;
-    border-radius: 999px;
+    border-radius: 8px;
     background: rgba(31, 111, 95, 0.1);
     color: var(--accent);
     font-weight: 700;
@@ -253,7 +255,7 @@ const styles = `
   .textarea-input,
   .file-input {
     width: 100%;
-    border-radius: 16px;
+    border-radius: 8px;
     border: 1px solid var(--line);
     padding: 14px 16px;
     background: var(--surface-strong);
@@ -290,6 +292,17 @@ const styles = `
     word-break: break-word;
   }
 
+  .file-input::file-selector-button {
+    margin-right: 12px;
+    border: 0;
+    border-radius: 8px;
+    padding: 10px 12px;
+    background: var(--info-soft);
+    color: var(--info);
+    font-weight: 800;
+    cursor: pointer;
+  }
+
   .button-row {
     display: flex;
     flex-wrap: wrap;
@@ -299,7 +312,7 @@ const styles = `
   .primary-button,
   .secondary-button {
     border: 0;
-    border-radius: 16px;
+    border-radius: 8px;
     padding: 14px 18px;
     cursor: pointer;
     transition: transform 0.18s ease, opacity 0.18s ease, box-shadow 0.18s ease;
@@ -307,7 +320,7 @@ const styles = `
   }
 
   .primary-button {
-    background: linear-gradient(135deg, #1f6f5f 0%, #164e42 100%);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent-strong) 100%);
     color: white;
     box-shadow: 0 12px 26px rgba(31, 111, 95, 0.22);
   }
@@ -338,7 +351,7 @@ const styles = `
   }
 
   .message {
-    border-radius: 18px;
+    border-radius: 8px;
     padding: 14px 16px;
     font-size: 0.94rem;
     line-height: 1.5;
@@ -361,7 +374,7 @@ const styles = `
   }
 
   .result-card {
-    border-radius: 22px;
+    border-radius: 8px;
     padding: 20px;
     display: grid;
     gap: 18px;
@@ -395,7 +408,7 @@ const styles = `
     display: grid;
     gap: 14px;
     padding: 16px;
-    border-radius: 18px;
+    border-radius: 8px;
     background: rgba(31, 111, 95, 0.08);
     border: 1px solid rgba(31, 111, 95, 0.14);
   }
@@ -408,7 +421,7 @@ const styles = `
 
   .score-pill,
   .score-category-card {
-    border-radius: 16px;
+    border-radius: 8px;
     padding: 12px 14px;
     background: rgba(255, 255, 255, 0.72);
     border: 1px solid rgba(59, 48, 36, 0.08);
@@ -480,7 +493,7 @@ const styles = `
   .study-category-card,
   .study-strategy-card,
   .study-module-card {
-    border-radius: 18px;
+    border-radius: 8px;
     border: 1px solid rgba(59, 48, 36, 0.08);
     background: rgba(255, 255, 255, 0.72);
   }
@@ -526,7 +539,7 @@ const styles = `
 
   .study-priority {
     padding: 7px 10px;
-    border-radius: 999px;
+    border-radius: 8px;
     font-size: 0.76rem;
     font-weight: 700;
     text-transform: uppercase;
@@ -555,7 +568,7 @@ const styles = `
   }
 
   .answer-card {
-    border-radius: 18px;
+    border-radius: 8px;
     padding: 12px;
     min-height: 72px;
     display: grid;
@@ -604,7 +617,7 @@ const styles = `
   }
 
   .preview-card {
-    border-radius: 24px;
+    border-radius: 8px;
     padding: 22px;
     display: grid;
     gap: 16px;
@@ -619,14 +632,14 @@ const styles = `
     width: 100%;
     max-height: 520px;
     object-fit: contain;
-    border-radius: 20px;
+    border-radius: 8px;
     border: 1px solid rgba(59, 48, 36, 0.08);
     background: rgba(255, 255, 255, 0.72);
   }
 
   .preview-code {
     margin: 0;
-    border-radius: 18px;
+    border-radius: 8px;
     padding: 18px;
     overflow: auto;
     background: rgba(32, 28, 23, 0.92);
@@ -646,8 +659,8 @@ const styles = `
     display: grid;
     gap: 6px;
     padding: 14px 16px;
-    border-radius: 18px;
-    background: rgba(255, 255, 255, 0.55);
+    border-radius: 8px;
+    background: var(--surface-soft);
     border: 1px solid rgba(59, 48, 36, 0.08);
   }
 
@@ -662,7 +675,7 @@ const styles = `
   }
 
   .saved-test-card {
-    border-radius: 20px;
+    border-radius: 8px;
     padding: 18px;
     display: grid;
     gap: 12px;
@@ -685,7 +698,7 @@ const styles = `
   }
 
   .saved-section-pill {
-    border-radius: 14px;
+    border-radius: 8px;
     padding: 10px 12px;
     background: rgba(32, 28, 23, 0.05);
     font-size: 0.88rem;
@@ -694,33 +707,137 @@ const styles = `
 
   .empty-state {
     padding: 26px 18px;
-    border-radius: 20px;
+    border-radius: 8px;
     border: 1px dashed rgba(59, 48, 36, 0.18);
     color: var(--muted);
     text-align: center;
-    background: rgba(255, 255, 255, 0.42);
+    background: var(--surface);
   }
 
-  .loader-row {
-    display: inline-flex;
+  .quiet-button {
+    border: 0;
+    padding: 0;
+    background: transparent;
+    color: var(--muted);
+    cursor: pointer;
+    font-weight: 700;
+    text-align: left;
+  }
+
+  .quiet-button:hover {
+    color: var(--text);
+  }
+
+  .score-report-head {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 18px;
     align-items: center;
+  }
+
+  .score-kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr));
     gap: 10px;
   }
 
-  .loader-dot {
-    width: 10px;
-    height: 10px;
-    border-radius: 999px;
-    background: currentColor;
-    animation: pulse 1s ease-in-out infinite;
+  .score-kpi {
+    padding: 14px;
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    background: var(--surface-soft);
   }
 
-  .loader-dot:nth-child(2) {
-    animation-delay: 0.15s;
+  .score-kpi-label {
+    color: var(--muted);
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
 
-  .loader-dot:nth-child(3) {
-    animation-delay: 0.3s;
+  .score-kpi-value {
+    margin-top: 6px;
+    font-size: 1.45rem;
+    font-weight: 900;
+    color: var(--filled);
+  }
+
+  .answer-review {
+    display: grid;
+    gap: 14px;
+  }
+
+  .answer-review summary {
+    cursor: pointer;
+    width: fit-content;
+    color: var(--accent);
+    font-weight: 800;
+  }
+
+  .answer-review summary:focus {
+    outline: 3px solid rgba(15, 118, 110, 0.18);
+    outline-offset: 4px;
+    border-radius: 6px;
+  }
+
+  .loading-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 40;
+    display: grid;
+    place-items: center;
+    padding: 20px;
+    background: rgba(15, 23, 42, 0.42);
+    backdrop-filter: blur(10px);
+    animation: fadeIn 0.18s ease both;
+  }
+
+  .loading-modal {
+    width: min(440px, 100%);
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.62);
+    background: #ffffff;
+    box-shadow: var(--shadow);
+    padding: 24px;
+    display: grid;
+    gap: 18px;
+    text-align: center;
+  }
+
+  .loading-ring {
+    width: 54px;
+    height: 54px;
+    margin: 0 auto;
+    border-radius: 50%;
+    border: 5px solid var(--accent-soft);
+    border-top-color: var(--accent);
+    animation: spin 0.85s linear infinite;
+  }
+
+  .loading-title {
+    margin: 0;
+    font-size: 1.25rem;
+  }
+
+  .loading-copy {
+    margin: 0;
+    color: var(--muted);
+    line-height: 1.55;
+  }
+
+  .modal-steps {
+    display: grid;
+    gap: 8px;
+    text-align: left;
+  }
+
+  .modal-step {
+    padding: 10px 12px;
+    border-radius: 8px;
+    background: var(--surface-soft);
+    color: var(--muted);
+    font-size: 0.9rem;
   }
 
   @keyframes rise {
@@ -734,23 +851,18 @@ const styles = `
     }
   }
 
-  @keyframes float {
-    0%, 100% {
-      transform: translate3d(0, 0, 0);
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
     }
-    50% {
-      transform: translate3d(0, 14px, 0);
+    to {
+      opacity: 1;
     }
   }
 
-  @keyframes pulse {
-    0%, 100% {
-      opacity: 0.3;
-      transform: scale(0.8);
-    }
-    50% {
-      opacity: 1;
-      transform: scale(1);
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
     }
   }
 
@@ -758,21 +870,31 @@ const styles = `
     .hero-grid,
     .results-grid,
     .admin-grid,
-    .study-plan-grid {
+    .study-plan-grid,
+    .score-report-head,
+    .score-kpis {
       grid-template-columns: 1fr;
     }
   }
 
   @media (max-width: 640px) {
     .app-shell {
-      padding: 18px 14px 40px;
+      padding: 14px 12px 36px;
     }
 
     .hero-card,
     .panel-card,
     .result-card {
-      padding: 18px;
-      border-radius: 22px;
+      padding: 16px;
+      border-radius: 8px;
+    }
+
+    .app-header {
+      align-items: flex-start;
+    }
+
+    .hero-title {
+      font-size: 2rem;
     }
 
     .panel-head,
@@ -782,11 +904,21 @@ const styles = `
     }
 
     .answers-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 8px;
     }
 
     .saved-test-sections {
       grid-template-columns: 1fr;
+    }
+
+    .score-overview,
+    .score-category-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .loading-modal {
+      padding: 20px;
     }
   }
 `;
@@ -926,7 +1058,6 @@ export default function App() {
   const [apiPreview, setApiPreview] = useState(null);
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
-  const [activeAction, setActiveAction] = useState("");
   const [uploadSuccess, setUploadSuccess] = useState("");
 
   const [isAdminOpen, setIsAdminOpen] = useState(false);
@@ -976,11 +1107,11 @@ export default function App() {
         error: "",
       };
     } catch (scoringError) {
+      console.error("Score calculation failed", scoringError);
       return {
         isPracticeTest1,
         scores: null,
-        error:
-          scoringError.message || "Practice Test 1 scoring could not be computed.",
+        error: "We could not calculate this test score yet.",
       };
     }
   }, [results, selectedTest]);
@@ -991,6 +1122,25 @@ export default function App() {
 
     return generateRecommendations(practiceTest1ScoringState.scores);
   }, [practiceTest1ScoringState.scores]);
+  const scoreSummaryItems = useMemo(
+    () =>
+      SECTION_CONFIG.map(({ key, title }) => {
+        const sectionScore = practiceTest1ScoringState.scores?.[key];
+        const answers = Array.isArray(results?.[key]) ? results[key] : [];
+        const counts = countAnswers(answers);
+
+        return {
+          key,
+          title,
+          primary: sectionScore ? sectionScore.scaleScore : counts.answered,
+          label: sectionScore ? "ACT score" : "Answered",
+          meta: sectionScore
+            ? `${sectionScore.rawScore} of ${sectionScore.totalPossible} questions correct`
+            : `${counts.blank} blank`,
+        };
+      }),
+    [practiceTest1ScoringState.scores, results]
+  );
 
   const loadPublicTests = async () => {
     setTestsLoading(true);
@@ -1008,7 +1158,12 @@ export default function App() {
         return tests[0] ? String(tests[0].id) : "";
       });
     } catch (loadError) {
-      setTestsError(loadError.message || "Could not load tests from the server.");
+      const friendlyMessage =
+        loadError.message &&
+        !/failed to fetch|networkerror|load failed|request failed/i.test(loadError.message)
+          ? loadError.message
+          : "We could not load the test list. Please try again.";
+      setTestsError(friendlyMessage);
     } finally {
       setTestsLoading(false);
     }
@@ -1052,18 +1207,17 @@ export default function App() {
 
   const runEndpointAction = async (actionKey) => {
     if (!selectedFile) {
-      setError("Please select an image before submitting.");
+      setError("Please upload an answer sheet image first.");
       return;
     }
 
     if (actionKey === "parse" && !selectedTestId) {
-      setError("Please choose a test before parsing student answers.");
+      setError("Please select a test before getting results.");
       return;
     }
 
     const endpoint = API_ENDPOINTS[actionKey];
     setIsLoading(true);
-    setActiveAction(endpoint.label);
     setError("");
     setUploadSuccess("");
     setResults(null);
@@ -1085,7 +1239,7 @@ export default function App() {
 
       if (!response.ok) {
         throw new Error(
-          `${endpoint.label} failed with status ${response.status}`
+          "We could not create the score report from this image. Please try a clearer photo or try again."
         );
       }
 
@@ -1103,10 +1257,14 @@ export default function App() {
 
       setUploadSuccess(endpoint.successMessage);
     } catch (uploadError) {
-      setError(uploadError.message || "Something went wrong while uploading.");
+      const friendlyMessage =
+        uploadError.message &&
+          !/failed to fetch|networkerror|load failed|request failed/i.test(uploadError.message)
+          ? uploadError.message
+          : "We could not reach the scoring service. Please check your connection and try again.";
+      setError(friendlyMessage);
     } finally {
       setIsLoading(false);
-      setActiveAction("");
     }
   };
 
@@ -1142,7 +1300,12 @@ export default function App() {
     } catch (loginError) {
       setIsAdminAuthenticated(false);
       setSavedTests([]);
-      setAdminError(loginError.message || "Invalid admin credentials.");
+      setAdminError(
+        loginError.message &&
+          !/failed to fetch|networkerror|load failed|request failed/i.test(loginError.message)
+          ? loginError.message
+          : "We could not sign you in. Please check the details and try again."
+      );
     }
   };
 
@@ -1157,7 +1320,7 @@ export default function App() {
     }
 
     if (!scoringRubricFile) {
-      setAdminError("Upload the scoring rubric PDF before saving.");
+      setAdminError("Upload the scoring guide PDF before saving.");
       return;
     }
 
@@ -1166,7 +1329,7 @@ export default function App() {
     );
     if (missingRecommendationSections.length) {
       setAdminError(
-        `Upload recommendation PDFs for ${missingRecommendationSections
+        `Upload study-material PDFs for ${missingRecommendationSections
           .map(({ title }) => title)
           .join(", ")} before saving.`
       );
@@ -1219,31 +1382,90 @@ export default function App() {
 
       setAdminSuccess(
         createdTest?.extractionSummary
-          ? `Saved test package. ${createdTest.extractionSummary}`
-          : "Saved test package and extracted rubric plus recommendation configs."
+          ? `Saved test. ${createdTest.extractionSummary}`
+          : "Saved test and prepared the scoring and study materials."
       );
     } catch (saveError) {
       setAdminError(
-        saveError.message || "Could not create the test package from the uploaded PDFs."
+        saveError.message &&
+          !/failed to fetch|networkerror|load failed|request failed/i.test(saveError.message)
+          ? saveError.message
+          : "We could not save the test right now. Please try again."
       );
     } finally {
       setIsSavingTest(false);
     }
   };
+  const loadingModal = isSavingTest
+    ? {
+        title: "Saving test",
+        copy: "We are reading the scoring guide and study materials. This can take a little while for larger PDFs.",
+        steps: [
+          "Reading the scoring guide",
+          "Preparing study recommendations",
+          "Saving the test for students",
+        ],
+      }
+    : {
+        title: "Building your score report",
+        copy: "We are reading the sheet, checking each section, and preparing your results.",
+        steps: [
+          "Reading answer marks",
+          "Scoring each section",
+          "Preparing study recommendations",
+        ],
+      };
 
   return (
     <div className="app-shell">
       <style>{styles}</style>
 
       <div className="app-container">
+        <header className="app-header">
+          <div className="brand-mark">
+            <img className="brand-logo" src="/prepmedians-logo.jpg" alt="Prepmedians" />
+            <div>
+              <p className="brand-title">Prepmedians Score Report</p>
+              <p className="brand-subtitle">ACT scoring and study guidance</p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            className="quiet-button"
+            onClick={() => setIsAdminOpen((current) => !current)}
+          >
+            {isAdminOpen ? "Close Setup" : "Educator Login"}
+          </button>
+        </header>
+
+        {(isLoading || isSavingTest) ? (
+          <div className="loading-backdrop" role="dialog" aria-modal="true">
+            <div className="loading-modal">
+              <div className="loading-ring" aria-hidden="true" />
+              <div>
+                <h2 className="loading-title">{loadingModal.title}</h2>
+                <p className="loading-copy">{loadingModal.copy}</p>
+              </div>
+              <div className="modal-steps">
+                {loadingModal.steps.map((step) => (
+                  <div key={step} className="modal-step">
+                    {step}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         <section className="hero-card">
           <div className="hero-top">
-            <span className="eyebrow">OMR Workflow</span>
-            <h1 className="hero-title">Shared tests, clean uploads, faster review.</h1>
+            <span className="eyebrow">Prepmedians ACT Results</span>
+            <h1 className="hero-title">Upload your answer sheet and get your Prepmedians score report.</h1>
             <p className="hero-copy">
-              Students pick from server-backed tests before uploading. Admins
-              import answer-key PDFs, let AI extract the answers, and publish
-              tests everyone can access.
+              Pick your test, upload a clear image of your answer sheet, and see
+              your section scores, category breakdowns, and recommended study
+              plan in one place.
             </p>
           </div>
 
@@ -1251,19 +1473,19 @@ export default function App() {
             <form className="panel-card stack" onSubmit={handleUpload}>
               <div className="panel-head">
                 <div>
-                  <h2 className="panel-title">Student Upload</h2>
+                  <h2 className="panel-title">Score Your Test</h2>
                   <p className="panel-subtitle">
-                    Choose a test, upload an image, then preprocess, split, or
-                    parse the student responses.
+                    Choose your test, upload your sheet, and we'll handle the
+                    reading and scoring.
                   </p>
                 </div>
                 <span className="status-chip">
-                  {isLoading ? activeAction || "Processing" : "Ready"}
+                  {isLoading ? "Scoring" : "Ready"}
                 </span>
               </div>
 
               <div className="field">
-                <label htmlFor="student-test-selector">Test selector</label>
+                <label htmlFor="student-test-selector">Select test</label>
                 <select
                   id="student-test-selector"
                   className="text-input"
@@ -1275,7 +1497,7 @@ export default function App() {
                     {testsLoading
                       ? "Loading tests..."
                       : availableTests.length
-                        ? "Choose a test"
+                        ? "Select a test"
                         : "No tests available yet"}
                   </option>
                   {availableTests.map((test) => (
@@ -1289,7 +1511,7 @@ export default function App() {
               {testsError ? <div className="message error">{testsError}</div> : null}
 
               <div className="field">
-                <label htmlFor="omr-file">OMR sheet image</label>
+                <label htmlFor="omr-file">Upload answer sheet</label>
                 <div className="file-pick">
                   <input
                     id="omr-file"
@@ -1299,7 +1521,7 @@ export default function App() {
                     onChange={handleFileChange}
                   />
                   <div className="file-name">
-                    {selectedFile ? selectedFile.name : "No file selected"}
+                    {selectedFile ? selectedFile.name : "No image selected yet"}
                   </div>
                 </div>
               </div>
@@ -1310,7 +1532,7 @@ export default function App() {
                     const counts = selectedTest.sectionCounts?.[key];
                     return (
                       <div key={key} className="saved-section-pill">
-                        {title}: {counts?.total || 0} answers
+                        {title}: {counts?.total || 0} questions
                       </div>
                     );
                   })}
@@ -1328,98 +1550,60 @@ export default function App() {
                   className="primary-button"
                   disabled={isLoading || !selectedFile || !selectedTestId}
                 >
-                  {isLoading && activeAction === API_ENDPOINTS.parse.label
-                    ? "Parsing Sheet..."
-                    : "Parse Answers"}
-                </button>
-
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={isLoading || !selectedFile}
-                  onClick={() => runEndpointAction("preprocess")}
-                >
-                  {isLoading && activeAction === API_ENDPOINTS.preprocess.label
-                    ? "Preprocessing..."
-                    : "Preprocess OMR"}
-                </button>
-
-                <button
-                  type="button"
-                  className="secondary-button"
-                  disabled={isLoading || !selectedFile}
-                  onClick={() => runEndpointAction("split")}
-                >
-                  {isLoading && activeAction === API_ENDPOINTS.split.label
-                    ? "Splitting..."
-                    : "Split OMR"}
-                </button>
-
-                <button
-                  type="button"
-                  className="secondary-button"
-                  onClick={() => setIsAdminOpen((current) => !current)}
-                >
-                  {isAdminOpen ? "Hide Admin" : "Open Admin Panel"}
+                  {isLoading ? "Building Your Report..." : "Get My Results"}
                 </button>
               </div>
 
-              {isLoading ? (
-                <div className="message success">
-                  <span className="loader-row">
-                    <span className="loader-dot" />
-                    <span className="loader-dot" />
-                    <span className="loader-dot" />
-                  </span>{" "}
-                  {activeAction || "Processing your OMR sheet"} now.
-                </div>
-              ) : (
-                <p className="helper-text">
-                  Parse uses the published n8n webhook. Preprocess and split use
-                  your FastAPI backend. Test metadata is loaded from the server.
-                </p>
-              )}
+              <p className="helper-text">
+                Use a straight, well-lit photo with the full page visible for
+                the most accurate read.
+              </p>
             </form>
 
             <div className="panel-card stack">
               <div className="panel-head">
                 <div>
-                  <h2 className="panel-title">Current Setup</h2>
+                  <h2 className="panel-title">What You'll Get</h2>
                   <p className="panel-subtitle">
-                    The upload UI is now connected to shared tests and backend
-                    services.
+                    Your report is designed to be easy to read and easy to act on.
                   </p>
                 </div>
               </div>
 
               <div className="endpoint-list">
                 <div className="endpoint-item">
-                  <strong>Published Tests</strong>
+                  <strong>Section Scores</strong>
+                  <div className="endpoint-url">
+                    English, Math, Reading, and Science scores in one report.
+                  </div>
+                </div>
+                <div className="endpoint-item">
+                  <strong>Category Breakdown</strong>
+                  <div className="endpoint-url">
+                    See exactly which question types need the most work.
+                  </div>
+                </div>
+                <div className="endpoint-item">
+                  <strong>Study Plan</strong>
+                  <div className="endpoint-url">
+                    Get targeted Prepmedians modules matched to your weak spots.
+                  </div>
+                </div>
+                <div className="endpoint-item">
+                  <strong>Ready-to-Score Tests</strong>
                   <div className="endpoint-url">
                     {testsLoading
-                      ? "Loading from server..."
-                      : `${availableTests.length} available`}
+                      ? "Loading tests..."
+                      : availableTests.length
+                        ? `${availableTests.length} tests ready to choose from`
+                        : "No tests available yet"}
                   </div>
-                </div>
-                <div className="endpoint-item">
-                  <strong>Preprocess OMR</strong>
-                  <div className="endpoint-url">
-                    {API_ENDPOINTS.preprocess.url}
-                  </div>
-                </div>
-                <div className="endpoint-item">
-                  <strong>Split OMR</strong>
-                  <div className="endpoint-url">{API_ENDPOINTS.split.url}</div>
-                </div>
-                <div className="endpoint-item">
-                  <strong>Parse Answers</strong>
-                  <div className="endpoint-url">{API_ENDPOINTS.parse.url}</div>
                 </div>
               </div>
 
               <p className="helper-text">
-                Odd questions map to A-D. Even questions map to F-J. Blank or
-                missing answers render as a hyphen.
+                You can still review the answers we found if you want a
+                question-by-question view.
               </p>
             </div>
           </div>
@@ -1427,6 +1611,26 @@ export default function App() {
 
         {results ? (
           <>
+            <section className="panel-card score-report-head">
+              <div>
+                <h2 className="panel-title">Score Report</h2>
+                <p className="panel-subtitle">
+                  {selectedTest?.name || "Selected test"} results are ready.
+                </p>
+              </div>
+              <div className="score-kpis">
+                {scoreSummaryItems.map((item) => (
+                  <div key={item.key} className="score-kpi">
+                    <div className="score-kpi-label">{item.title}</div>
+                    <div className="score-kpi-value">{item.primary}</div>
+                    <div className="result-meta">
+                      {item.label} | {item.meta}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+
             <section className="results-grid">
               {practiceTest1ScoringState.error ? (
                 <div className="message error results-banner">
@@ -1458,14 +1662,14 @@ export default function App() {
                       <div className="score-summary">
                         <div className="score-overview">
                           <div className="score-pill">
-                            <div className="score-label">Raw score</div>
+                            <div className="score-label">Questions correct</div>
                             <div className="score-value">
                               {sectionScore.rawScore} / {sectionScore.totalPossible}
                             </div>
                           </div>
 
                           <div className="score-pill">
-                            <div className="score-label">Scale score</div>
+                            <div className="score-label">ACT score</div>
                             <div className="score-value">{sectionScore.scaleScore}</div>
                           </div>
                         </div>
@@ -1488,27 +1692,30 @@ export default function App() {
                       </div>
                     ) : null}
 
-                    <div className="answers-grid">
-                      {answers.map((value, index) => {
-                        const questionNumber = index + 1;
-                        const mappedAnswer = mapAnswer(value, questionNumber);
-                        const isBlank = mappedAnswer === "-";
+                    <details className="answer-review">
+                      <summary>Review answers we found</summary>
+                      <div className="answers-grid">
+                        {answers.map((value, index) => {
+                          const questionNumber = index + 1;
+                          const mappedAnswer = mapAnswer(value, questionNumber);
+                          const isBlank = mappedAnswer === "-";
 
-                        return (
-                          <div
-                            key={`${key}-${questionNumber}`}
-                            className={`answer-card ${
-                              isBlank ? "blank" : "filled"
-                            }`}
-                          >
-                            <div className="answer-question">
-                              Q{questionNumber}
+                          return (
+                            <div
+                              key={`${key}-${questionNumber}`}
+                              className={`answer-card ${
+                                isBlank ? "blank" : "filled"
+                              }`}
+                            >
+                              <div className="answer-question">
+                                Q{questionNumber}
+                              </div>
+                              <div className="answer-value">{mappedAnswer}</div>
                             </div>
-                            <div className="answer-value">{mappedAnswer}</div>
-                          </div>
-                        );
-                      })}
-                    </div>
+                          );
+                        })}
+                      </div>
+                    </details>
                   </article>
                 );
               })}
@@ -1520,9 +1727,8 @@ export default function App() {
                   <div className="study-plan-header">
                     <h2 className="panel-title">Recommended Study Plan</h2>
                     <p className="study-plan-copy">
-                      Based on the category scores already computed above, these
-                      Prepmedians modules prioritize weaker areas first and keep
-                      stronger categories compact.
+                      Based on your category breakdown, these Prepmedians modules
+                      start with the areas that can move your score the most.
                     </p>
                   </div>
                 </div>
@@ -1540,7 +1746,7 @@ export default function App() {
                           <div>
                             <h3 className="result-title">{title}</h3>
                             <div className="result-meta">
-                              Personalized category recommendations
+                              Your recommended modules
                             </div>
                           </div>
                         </div>
@@ -1623,13 +1829,13 @@ export default function App() {
           </>
         ) : null}
 
-        {apiPreview ? (
+        {apiPreview && isAdminOpen ? (
           <section className="preview-card">
             <div className="panel-head">
               <div>
-                <h2 className="panel-title">{apiPreview.endpointLabel} Output</h2>
+                <h2 className="panel-title">Admin Review</h2>
                 <p className="panel-subtitle">
-                  {apiPreview.endpointUrl}
+                  {apiPreview.endpointLabel}
                 </p>
               </div>
               <span className="status-chip">{apiPreview.contentType}</span>
@@ -1651,11 +1857,10 @@ export default function App() {
           </section>
         ) : null}
 
-        {!results && !apiPreview ? (
+        {!results && (!apiPreview || !isAdminOpen) ? (
           <section className="panel-card">
             <div className="empty-state">
-              Upload an OMR image to parse answers or inspect preprocess and
-              split outputs here.
+              Upload your answer sheet to get your score report and study plan.
             </div>
           </section>
         ) : null}
@@ -1665,10 +1870,10 @@ export default function App() {
             <div className="panel-card stack">
               <div className="panel-head">
                 <div>
-                  <h2 className="panel-title">Admin Panel</h2>
+                  <h2 className="panel-title">Test Setup</h2>
                   <p className="panel-subtitle">
-                    Create a full test package by uploading one scoring rubric
-                    PDF and four subject recommendation PDFs.
+                    Add a new ACT test by uploading its scoring guide and the
+                    four subject study-material PDFs.
                   </p>
                 </div>
                 <span className="status-chip">
@@ -1687,7 +1892,7 @@ export default function App() {
                       type="text"
                       value={adminCredentials.username}
                       onChange={handleAdminCredentialChange}
-                      placeholder="admin"
+                      placeholder="Username"
                     />
                   </div>
 
@@ -1700,7 +1905,7 @@ export default function App() {
                       type="password"
                       value={adminCredentials.password}
                       onChange={handleAdminCredentialChange}
-                      placeholder="omr123"
+                      placeholder="Password"
                     />
                   </div>
 
@@ -1713,13 +1918,12 @@ export default function App() {
 
                   <div className="button-row">
                     <button type="submit" className="primary-button">
-                      Login
+                      Sign In
                     </button>
                   </div>
 
                   <p className="helper-text">
-                    Default demo access matches the backend env defaults:
-                    admin / omr123
+                    Use the admin sign-in details for this Prepmedians app.
                   </p>
                 </form>
               ) : (
@@ -1737,7 +1941,7 @@ export default function App() {
                   </div>
 
                   <div className="field">
-                    <label htmlFor="scoring-rubric-upload">Scoring rubric PDF</label>
+                    <label htmlFor="scoring-rubric-upload">Scoring guide PDF</label>
                     <input
                       key={`scoring-rubric-${adminUploadResetKey}`}
                       id="scoring-rubric-upload"
@@ -1751,17 +1955,17 @@ export default function App() {
                     <div className="file-name">
                       {scoringRubricFile
                         ? scoringRubricFile.name
-                        : "No scoring rubric PDF selected"}
+                        : "No scoring guide selected yet"}
                     </div>
                   </div>
 
                   <div className="field">
-                    <label>Recommendation PDFs</label>
+                    <label>Study-material PDFs</label>
                     <div className="stack">
                       {SECTION_CONFIG.map(({ key, title }) => (
                         <div key={`recommendation-${key}`} className="field">
                           <label htmlFor={`${key}-recommendation-upload`}>
-                            {title} recommendations
+                            {title} study materials
                           </label>
                           <input
                             key={`${key}-recommendation-${adminUploadResetKey}`}
@@ -1779,7 +1983,7 @@ export default function App() {
                           <div className="file-name">
                             {recommendationFiles[key]
                               ? recommendationFiles[key].name
-                              : `No ${title.toLowerCase()} recommendation PDF selected`}
+                              : `No ${title.toLowerCase()} study-material PDF selected yet`}
                           </div>
                         </div>
                       ))}
@@ -1799,14 +2003,14 @@ export default function App() {
                       className="primary-button"
                       disabled={isSavingTest}
                     >
-                      {isSavingTest ? "Building Test Package..." : "Create Test Package"}
+                      {isSavingTest ? "Saving Test..." : "Save Test"}
                     </button>
                   </div>
 
                   <p className="helper-text">
-                    Upload one scoring rubric plus four subject recommendation
-                    PDFs. The backend extracts structured configs and stores the
-                    finished test package on the server.
+                    Upload one scoring guide plus four subject study-material
+                    PDFs. The app will prepare a shared test that students can
+                    choose from.
                   </p>
                 </form>
               )}
@@ -1815,9 +2019,9 @@ export default function App() {
             <div className="panel-card stack">
               <div className="panel-head">
                 <div>
-                  <h2 className="panel-title">Server Tests</h2>
+                  <h2 className="panel-title">Test Library</h2>
                   <p className="panel-subtitle">
-                    Loaded from the backend, not browser local storage.
+                    These tests are available to students from the test selector.
                   </p>
                 </div>
                 <span className="status-chip">
@@ -1837,14 +2041,13 @@ export default function App() {
                       </div>
 
                       <div className="helper-text">
-                        Rubric: {test.sourceFilename || "Manual import"} | Status:{" "}
-                        {test.configStatus || "legacy"}
+                        Scoring guide: {test.sourceFilename || "Manual setup"}
                         {test.extractionSummary ? ` | ${test.extractionSummary}` : ""}
                       </div>
 
                       {Object.keys(test.recommendationFilenames || {}).length ? (
                         <div className="helper-text">
-                          Recommendation PDFs:{" "}
+                          Study-material PDFs:{" "}
                           {Object.entries(test.recommendationFilenames)
                             .map(([sectionKey, filename]) => `${sectionKey}: ${filename}`)
                             .join(" | ")}
@@ -1876,10 +2079,6 @@ export default function App() {
                         </div>
                       </div>
 
-                      <div className="helper-text">
-                        Status: {test.configStatus || "legacy"}
-                      </div>
-
                       <div className="saved-test-sections">
                         {SECTION_CONFIG.map(({ key, title }) => {
                           const counts = test.sectionCounts?.[key];
@@ -1896,7 +2095,7 @@ export default function App() {
                 </div>
               ) : (
                 <div className="empty-state">
-                  No server-backed tests yet. Import the first answer-key PDF.
+                  No shared tests yet. Upload the first scoring guide to get started.
                 </div>
               )}
             </div>
