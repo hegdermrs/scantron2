@@ -1,5 +1,6 @@
 import base64
 import io
+import itertools
 import json
 import os
 import secrets
@@ -473,14 +474,37 @@ def detect_section_bands_via_projection(gray, pad_y=12):
     min_run_height = int(height * 0.04)
     runs = [run for run in runs if run[1] - run[0] >= min_run_height]
 
-    if len(runs) < len(SECTION_CONFIG):
+    target_count = len(SECTION_CONFIG)
+    if len(runs) < target_count:
         raise HTTPException(
             status_code=500,
-            detail=f"Projection found {len(runs)} content runs, need {len(SECTION_CONFIG)}",
+            detail=f"Projection found {len(runs)} content runs, need {target_count}",
         )
 
-    runs_sorted_by_height = sorted(runs, key=lambda run: run[1] - run[0], reverse=True)
-    chosen = sorted(runs_sorted_by_height[: len(SECTION_CONFIG)], key=lambda run: run[0])
+    runs_by_y = sorted(runs, key=lambda run: run[0])
+    if len(runs_by_y) == target_count:
+        chosen = runs_by_y
+    else:
+        best_chain = None
+        best_variance = None
+        for chain in itertools.combinations(runs_by_y, target_count):
+            centers = [(run[0] + run[1]) / 2.0 for run in chain]
+            spacings = [
+                centers[index + 1] - centers[index] for index in range(target_count - 1)
+            ]
+            if min(spacings) <= 0:
+                continue
+            mean_spacing = sum(spacings) / len(spacings)
+            variance = sum((s - mean_spacing) ** 2 for s in spacings) / len(spacings)
+            if best_variance is None or variance < best_variance:
+                best_variance = variance
+                best_chain = chain
+        if best_chain is None:
+            raise HTTPException(
+                status_code=500,
+                detail="Projection could not find a uniformly-spaced chain of section runs",
+            )
+        chosen = list(best_chain)
 
     col_density = mask.sum(axis=0).astype(np.float32) / 255.0
     col_smooth = np.convolve(col_density, smoothing_kernel, mode="same")
