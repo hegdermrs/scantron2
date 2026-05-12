@@ -389,8 +389,9 @@ def draw_debug(gray, debug_info):
             2,
         )
 
-    bottom = debug_info["bottom"]
-    cv2.line(vis, (bottom["x1"], bottom["y"]), (bottom["x2"], bottom["y"]), (255, 255, 0), 2)
+    bottom = debug_info.get("bottom")
+    if bottom is not None:
+        cv2.line(vis, (bottom["x1"], bottom["y"]), (bottom["x2"], bottom["y"]), (255, 255, 0), 2)
 
     for name, band in debug_info["bands"].items():
         x1, x2 = band["x1"], band["x2"]
@@ -1329,8 +1330,44 @@ async def split_route(file: UploadFile = File(...)):
 async def debug_route(file: UploadFile = File(...)):
     img = read_image_from_upload(file)
     gray = preprocess_for_ai(img)
-    _, debug_info = split_omr(gray)
+
+    lines = detect_horizontal_rules(gray)
+    debug_info = {
+        "lines": lines,
+        "dividers": [],
+        "bottom": None,
+        "bands": {},
+        "debug_blocks": [],
+    }
+    warning = None
+    try:
+        bands, dividers, bottom = build_section_bands(lines, pad_y=15)
+        debug_info["dividers"] = dividers
+        debug_info["bottom"] = bottom
+        debug_info["bands"] = bands
+    except HTTPException as exc:
+        warning = exc.detail
+
     vis = draw_debug(gray, debug_info)
+    if warning:
+        cv2.putText(
+            vis,
+            warning,
+            (12, 36),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (0, 0, 255),
+            2,
+        )
+        cv2.putText(
+            vis,
+            f"horizontal rules found: {len(lines)}",
+            (12, 70),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.7,
+            (0, 0, 255),
+            2,
+        )
 
     ok, buf = cv2.imencode(".jpg", vis, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
     if not ok:
