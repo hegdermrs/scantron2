@@ -174,26 +174,44 @@ def order_quad_corners(quad: np.ndarray) -> np.ndarray:
     return ordered
 
 
-def find_sheet_quad(img: np.ndarray):
-    height, width = img.shape[:2]
-    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
-    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
-    edges = cv2.Canny(blurred, 30, 120)
-    kernel = np.ones((5, 5), np.uint8)
-    edges = cv2.dilate(edges, kernel, iterations=2)
-
-    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+def _largest_quad_contour(mask: np.ndarray, width: int, height: int):
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
     contours = sorted(contours, key=cv2.contourArea, reverse=True)[:5]
-
     image_area = float(width * height)
     for contour in contours:
         if cv2.contourArea(contour) < 0.3 * image_area:
             return None
         perimeter = cv2.arcLength(contour, True)
-        approx = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
-        if len(approx) == 4 and cv2.isContourConvex(approx):
-            return approx.reshape(4, 2).astype(np.float32)
+        for epsilon in (0.02, 0.03, 0.04):
+            approx = cv2.approxPolyDP(contour, epsilon * perimeter, True)
+            if len(approx) == 4 and cv2.isContourConvex(approx):
+                return approx.reshape(4, 2).astype(np.float32)
     return None
+
+
+def find_sheet_quad(img: np.ndarray):
+    height, width = img.shape[:2]
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+
+    blurred_big = cv2.GaussianBlur(gray, (15, 15), 0)
+    _, paper_mask = cv2.threshold(blurred_big, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+    close_kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (51, 51))
+    paper_mask = cv2.morphologyEx(paper_mask, cv2.MORPH_CLOSE, close_kernel)
+    quad = _largest_quad_contour(paper_mask, width, height)
+    if quad is not None:
+        return quad
+
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blurred, 30, 120)
+    dilate_kernel = np.ones((5, 5), np.uint8)
+    edges = cv2.dilate(edges, dilate_kernel, iterations=2)
+    quad = _largest_quad_contour(edges, width, height)
+    if quad is not None:
+        return quad
+
+    edges_soft = cv2.Canny(blurred, 10, 40)
+    edges_soft = cv2.dilate(edges_soft, dilate_kernel, iterations=3)
+    return _largest_quad_contour(edges_soft, width, height)
 
 
 def rectify_sheet(img: np.ndarray) -> np.ndarray:
@@ -1406,6 +1424,16 @@ async def debug_route(
     img = read_image_from_upload(file)
     gray = preprocess_for_ai(img, mode=mode)
 
+    rectify_status = None
+    if mode == "rectified":
+        gray_height, gray_width = gray.shape[:2]
+        rectified_ok = gray_width == RECTIFIED_WIDTH and gray_height == RECTIFIED_HEIGHT
+        rectify_status = (
+            f"rectified ok ({gray_width}x{gray_height})"
+            if rectified_ok
+            else f"rectified FAILED (kept {gray_width}x{gray_height}) - quad not found"
+        )
+
     lines = detect_horizontal_rules(gray)
     debug_info = {
         "lines": lines,
@@ -1424,20 +1452,33 @@ async def debug_route(
         warning = exc.detail
 
     vis = draw_debug(gray, debug_info)
+    overlay_y = 36
+    if rectify_status:
+        cv2.putText(
+            vis,
+            rectify_status,
+            (12, overlay_y),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.8,
+            (255, 0, 255),
+            2,
+        )
+        overlay_y += 34
     if warning:
         cv2.putText(
             vis,
             warning,
-            (12, 36),
+            (12, overlay_y),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.8,
             (0, 0, 255),
             2,
         )
+        overlay_y += 34
         cv2.putText(
             vis,
             f"horizontal rules found: {len(lines)}",
-            (12, 70),
+            (12, overlay_y),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
             (0, 0, 255),
