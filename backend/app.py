@@ -58,7 +58,7 @@ PARSE_WEBHOOK_URL = os.getenv(
 MAX_PROCESSING_DIMENSION = int(os.getenv("MAX_PROCESSING_DIMENSION", "2200"))
 RECTIFIED_WIDTH = 1700
 RECTIFIED_HEIGHT = 2200
-PIPELINE_MODES = {"legacy", "rectified"}
+PIPELINE_MODES = {"legacy", "rectified", "projection"}
 
 app = FastAPI(title="OMR Pipeline")
 security = HTTPBasic()
@@ -237,7 +237,7 @@ def preprocess_for_ai(img: np.ndarray, mode: str = "legacy") -> np.ndarray:
     if img.shape[1] > img.shape[0]:
         img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
 
-    if mode == "rectified":
+    if mode in ("rectified", "projection"):
         img = rectify_sheet(img)
 
     height, width = img.shape[:2]
@@ -409,9 +409,82 @@ def build_section_bands(lines, pad_y=15):
     return bands, dividers, bottom
 
 
-def split_omr(gray):
-    lines = detect_horizontal_rules(gray)
-    bands, dividers, bottom = build_section_bands(lines, pad_y=15)
+def detect_section_bands_via_projection(gray, pad_y=12):
+    height, width = gray.shape
+    _, mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+
+    row_density = mask.sum(axis=1).astype(np.float32) / 255.0
+    smoothing_kernel = np.ones(31, dtype=np.float32) / 31.0
+    row_smooth = np.convolve(row_density, smoothing_kernel, mode="same")
+    content_threshold = row_smooth.max() * 0.15
+    content_rows = row_smooth > content_threshold
+
+    runs = []
+    in_run = False
+    run_start = 0
+    for y, is_content in enumerate(content_rows):
+        if is_content and not in_run:
+            run_start = y
+            in_run = True
+        elif not is_content and in_run:
+            runs.append((run_start, y - 1))
+            in_run = False
+    if in_run:
+        runs.append((run_start, len(content_rows) - 1))
+
+    min_run_height = int(height * 0.04)
+    runs = [run for run in runs if run[1] - run[0] >= min_run_height]
+
+    if len(runs) < len(SECTION_CONFIG):
+        raise HTTPException(
+            status_code=500,
+            detail=f"Projection found {len(runs)} content runs, need {len(SECTION_CONFIG)}",
+        )
+
+    runs_sorted_by_height = sorted(runs, key=lambda run: run[1] - run[0], reverse=True)
+    chosen = sorted(runs_sorted_by_height[: len(SECTION_CONFIG)], key=lambda run: run[0])
+
+    col_density = mask.sum(axis=0).astype(np.float32) / 255.0
+    col_smooth = np.convolve(col_density, smoothing_kernel, mode="same")
+    col_threshold = col_smooth.max() * 0.10
+    content_cols = col_smooth > col_threshold
+
+    if content_cols.any():
+        x1_global = int(np.argmax(content_cols))
+        x2_global = int(len(content_cols) - 1 - np.argmax(content_cols[::-1]))
+    else:
+        x1_global = int(width * 0.08)
+        x2_global = int(width * 0.92)
+
+    bands = {}
+    for index, name in enumerate(SECTION_CONFIG):
+        y_start, y_end = chosen[index]
+        bands[name] = {
+            "y1": int(y_start + pad_y),
+            "y2": int(y_end - pad_y),
+            "x1": x1_global,
+            "x2": x2_global,
+        }
+
+    return bands, {
+        "row_density": row_smooth,
+        "runs": runs,
+        "chosen_runs": chosen,
+        "content_threshold": float(content_threshold),
+        "col_bounds": (x1_global, x2_global),
+    }
+
+
+def split_omr(gray, mode="legacy"):
+    if mode == "projection":
+        bands, projection_info = detect_section_bands_via_projection(gray)
+        lines = []
+        dividers = []
+        bottom = None
+    else:
+        lines = detect_horizontal_rules(gray)
+        bands, dividers, bottom = build_section_bands(lines, pad_y=15)
+        projection_info = None
 
     results = []
     debug_blocks = []
@@ -455,7 +528,53 @@ def split_omr(gray):
         "bottom": bottom,
         "bands": bands,
         "debug_blocks": debug_blocks,
+        "projection": projection_info,
     }
+
+
+def _draw_projection_curve(vis, projection_info):
+    row_density = projection_info["row_density"]
+    threshold = projection_info["content_threshold"]
+    runs = projection_info.get("runs", [])
+    chosen = projection_info.get("chosen_runs", [])
+    height, width = vis.shape[:2]
+
+    plot_width = max(60, width // 12)
+    plot_x = width - plot_width - 8
+    max_density = max(float(row_density.max()), 1.0)
+
+    cv2.rectangle(vis, (plot_x - 2, 0), (width - 6, height - 1), (40, 40, 40), 1)
+
+    previous_x = plot_x
+    previous_y = 0
+    for y in range(height):
+        value = float(row_density[y]) if y < len(row_density) else 0.0
+        x = plot_x + int((value / max_density) * (plot_width - 2))
+        if y > 0:
+            cv2.line(vis, (previous_x, previous_y), (x, y), (255, 255, 0), 1)
+        previous_x = x
+        previous_y = y
+
+    threshold_x = plot_x + int((threshold / max_density) * (plot_width - 2))
+    cv2.line(vis, (threshold_x, 0), (threshold_x, height - 1), (0, 200, 200), 1)
+
+    for run_start, run_end in runs:
+        cv2.rectangle(
+            vis,
+            (plot_x - 2, run_start),
+            (width - 6, run_end),
+            (80, 80, 80),
+            1,
+        )
+
+    for run_start, run_end in chosen:
+        cv2.rectangle(
+            vis,
+            (plot_x - 2, run_start),
+            (width - 6, run_end),
+            (0, 255, 0),
+            2,
+        )
 
 
 def draw_debug(gray, debug_info):
@@ -1373,7 +1492,7 @@ async def split_route(
     try:
         img = read_image_from_upload(file)
         gray = preprocess_for_ai(img, mode=mode)
-        blocks, debug_info = split_omr(gray)
+        blocks, debug_info = split_omr(gray, mode=mode)
     except HTTPException as exc:
         if exc.status_code < 500:
             raise
@@ -1405,7 +1524,7 @@ async def split_route(
     return {
         "count": len(blocks),
         "dividers": [divider["y"] for divider in debug_info["dividers"]],
-        "inferred_bottom": debug_info["bottom"]["y"],
+        "inferred_bottom": debug_info["bottom"]["y"] if debug_info.get("bottom") else None,
         "bands": debug_info["bands"],
         "blocks": blocks,
         "_status": "ok" if len(blocks) >= 20 else "partial",
@@ -1425,33 +1544,46 @@ async def debug_route(
     gray = preprocess_for_ai(img, mode=mode)
 
     rectify_status = None
-    if mode == "rectified":
+    if mode in ("rectified", "projection"):
         gray_height, gray_width = gray.shape[:2]
         rectified_ok = gray_width == RECTIFIED_WIDTH and gray_height == RECTIFIED_HEIGHT
         rectify_status = (
-            f"rectified ok ({gray_width}x{gray_height})"
+            f"{mode} ok ({gray_width}x{gray_height})"
             if rectified_ok
-            else f"rectified FAILED (kept {gray_width}x{gray_height}) - quad not found"
+            else f"{mode} FAILED to warp (kept {gray_width}x{gray_height}) - quad not found"
         )
 
-    lines = detect_horizontal_rules(gray)
     debug_info = {
-        "lines": lines,
+        "lines": [],
         "dividers": [],
         "bottom": None,
         "bands": {},
         "debug_blocks": [],
     }
     warning = None
-    try:
-        bands, dividers, bottom = build_section_bands(lines, pad_y=15)
-        debug_info["dividers"] = dividers
-        debug_info["bottom"] = bottom
-        debug_info["bands"] = bands
-    except HTTPException as exc:
-        warning = exc.detail
+
+    if mode == "projection":
+        try:
+            bands, projection_info = detect_section_bands_via_projection(gray)
+            debug_info["bands"] = bands
+            debug_info["projection"] = projection_info
+        except HTTPException as exc:
+            warning = exc.detail
+    else:
+        lines = detect_horizontal_rules(gray)
+        debug_info["lines"] = lines
+        try:
+            bands, dividers, bottom = build_section_bands(lines, pad_y=15)
+            debug_info["dividers"] = dividers
+            debug_info["bottom"] = bottom
+            debug_info["bands"] = bands
+        except HTTPException as exc:
+            warning = exc.detail
 
     vis = draw_debug(gray, debug_info)
+
+    if mode == "projection" and "projection" in debug_info and debug_info["projection"] is not None:
+        _draw_projection_curve(vis, debug_info["projection"])
     overlay_y = 36
     if rectify_status:
         cv2.putText(
@@ -1477,7 +1609,7 @@ async def debug_route(
         overlay_y += 34
         cv2.putText(
             vis,
-            f"horizontal rules found: {len(lines)}",
+            f"horizontal rules found: {len(debug_info['lines'])}",
             (12, overlay_y),
             cv2.FONT_HERSHEY_SIMPLEX,
             0.7,
