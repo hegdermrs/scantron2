@@ -491,6 +491,23 @@ def detect_section_bands_via_projection(gray, pad_y=12):
         run: float(row_smooth[run[0] : run[1] + 1].sum()) for run in runs
     }
 
+    def tighten_to_dense_core(run, threshold_ratio=0.8):
+        start, end = run
+        if end <= start:
+            return run
+        interior = row_smooth[start : end + 1]
+        if interior.size == 0:
+            return run
+        local_max = float(interior.max())
+        if local_max <= 0:
+            return run
+        above = interior > local_max * threshold_ratio
+        if not above.any():
+            return run
+        first = int(np.argmax(above))
+        last = len(above) - 1 - int(np.argmax(above[::-1]))
+        return (start + first, start + last)
+
     runs_by_y = sorted(runs, key=lambda run: run[0])
     if len(runs_by_y) == target_count:
         chosen = runs_by_y
@@ -527,17 +544,38 @@ def detect_section_bands_via_projection(gray, pad_y=12):
             )
         chosen = list(best_chain)
 
-    col_density = mask.sum(axis=0).astype(np.float32) / 255.0
-    col_smooth = np.convolve(col_density, smoothing_kernel, mode="same")
-    col_threshold = col_smooth.max() * 0.10
-    content_cols = col_smooth > col_threshold
+    test_top = min(run[0] for run in chosen)
+    test_bottom = max(run[1] for run in chosen)
+    test_mask = mask[test_top : test_bottom + 1, :]
 
-    if content_cols.any():
-        x1_global = int(np.argmax(content_cols))
-        x2_global = int(len(content_cols) - 1 - np.argmax(content_cols[::-1]))
+    test_row_density = test_mask.sum(axis=1).astype(np.float32) / 255.0
+    test_row_max = float(test_row_density.max())
+    if test_row_max > 0:
+        dense_row_mask = test_row_density > test_row_max * 0.7
+        if dense_row_mask.any():
+            dense_rows = test_mask[dense_row_mask]
+            test_col_density = dense_rows.sum(axis=0).astype(np.float32) / 255.0
+        else:
+            test_col_density = test_mask.sum(axis=0).astype(np.float32) / 255.0
     else:
-        x1_global = int(width * 0.08)
-        x2_global = int(width * 0.92)
+        test_col_density = test_mask.sum(axis=0).astype(np.float32) / 255.0
+
+    test_col_smooth = np.convolve(test_col_density, smoothing_kernel, mode="same")
+    test_col_max = float(test_col_smooth.max())
+    if test_col_max > 0:
+        test_col_threshold = test_col_max * 0.65
+        test_content_cols = test_col_smooth > test_col_threshold
+        if test_content_cols.any():
+            x_shared_1 = int(np.argmax(test_content_cols))
+            x_shared_2 = int(
+                len(test_content_cols) - 1 - np.argmax(test_content_cols[::-1])
+            )
+        else:
+            x_shared_1 = int(width * 0.08)
+            x_shared_2 = int(width * 0.92)
+    else:
+        x_shared_1 = int(width * 0.08)
+        x_shared_2 = int(width * 0.92)
 
     bands = {}
     for index, name in enumerate(SECTION_CONFIG):
@@ -545,8 +583,8 @@ def detect_section_bands_via_projection(gray, pad_y=12):
         bands[name] = {
             "y1": int(y_start + pad_y),
             "y2": int(y_end - pad_y),
-            "x1": x1_global,
-            "x2": x2_global,
+            "x1": x_shared_1,
+            "x2": x_shared_2,
         }
 
     return bands, {
@@ -554,7 +592,7 @@ def detect_section_bands_via_projection(gray, pad_y=12):
         "runs": runs,
         "chosen_runs": chosen,
         "content_threshold": float(content_threshold),
-        "col_bounds": (x1_global, x2_global),
+        "col_bounds": (x_shared_1, x_shared_2),
     }
 
 
