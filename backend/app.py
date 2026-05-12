@@ -409,6 +409,40 @@ def build_section_bands(lines, pad_y=15):
     return bands, dividers, bottom
 
 
+def _split_run_recursively(run, row_smooth, min_segment_height=80, min_drop_ratio=0.4):
+    start, end = run
+    if end - start < 2 * min_segment_height:
+        return [run]
+
+    interior = row_smooth[start : end + 1]
+    max_value = float(interior.max())
+    if max_value <= 0:
+        return [run]
+
+    margin = min_segment_height
+    if margin >= len(interior) - margin:
+        return [run]
+
+    central = interior[margin : len(interior) - margin]
+    if len(central) == 0:
+        return [run]
+
+    min_index_in_central = int(np.argmin(central))
+    min_value = float(central[min_index_in_central])
+
+    if min_value > max_value * (1.0 - min_drop_ratio):
+        return [run]
+
+    split_y = start + margin + min_index_in_central
+    left = (start, split_y)
+    right = (split_y + 1, end)
+    return _split_run_recursively(
+        left, row_smooth, min_segment_height, min_drop_ratio
+    ) + _split_run_recursively(
+        right, row_smooth, min_segment_height, min_drop_ratio
+    )
+
+
 def detect_section_bands_via_projection(gray, pad_y=12):
     height, width = gray.shape
     _, mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
@@ -419,7 +453,7 @@ def detect_section_bands_via_projection(gray, pad_y=12):
     content_threshold = row_smooth.max() * 0.15
     content_rows = row_smooth > content_threshold
 
-    runs = []
+    raw_runs = []
     in_run = False
     run_start = 0
     for y, is_content in enumerate(content_rows):
@@ -427,10 +461,14 @@ def detect_section_bands_via_projection(gray, pad_y=12):
             run_start = y
             in_run = True
         elif not is_content and in_run:
-            runs.append((run_start, y - 1))
+            raw_runs.append((run_start, y - 1))
             in_run = False
     if in_run:
-        runs.append((run_start, len(content_rows) - 1))
+        raw_runs.append((run_start, len(content_rows) - 1))
+
+    runs = []
+    for run in raw_runs:
+        runs.extend(_split_run_recursively(run, row_smooth))
 
     min_run_height = int(height * 0.04)
     runs = [run for run in runs if run[1] - run[0] >= min_run_height]
