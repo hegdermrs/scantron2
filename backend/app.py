@@ -502,6 +502,41 @@ def detect_section_bands_via_projection(gray, pad_y=12):
         run: float(row_smooth[run[0] : run[1] + 1].sum()) for run in runs
     }
 
+    def column_peak_count(run, min_distance=120, threshold_ratio=0.3):
+        start, end = run
+        sub = mask[start : end + 1, :]
+        row_density_local = sub.sum(axis=1).astype(np.float32) / 255.0
+        if row_density_local.size == 0 or row_density_local.max() <= 0:
+            return 0
+        dense = row_density_local > row_density_local.max() * 0.7
+        if not dense.any():
+            return 0
+        dense_rows = sub[dense]
+        col = dense_rows.sum(axis=0).astype(np.float32) / 255.0
+        col_smooth_local = np.convolve(col, np.ones(11, dtype=np.float32) / 11.0, mode="same")
+        col_max = float(col_smooth_local.max())
+        if col_max <= 0:
+            return 0
+        candidates_local = []
+        for x in range(1, len(col_smooth_local) - 1):
+            if (
+                col_smooth_local[x] > col_smooth_local[x - 1]
+                and col_smooth_local[x] >= col_smooth_local[x + 1]
+                and col_smooth_local[x] > col_max * threshold_ratio
+            ):
+                candidates_local.append((x, float(col_smooth_local[x])))
+        candidates_local.sort(key=lambda c: c[1], reverse=True)
+        selected_local = []
+        for x, value in candidates_local:
+            if all(abs(x - other_x) >= min_distance for other_x, _ in selected_local):
+                selected_local.append((x, value))
+        return len(selected_local)
+
+    run_peaks = {run: column_peak_count(run) for run in runs}
+    test_section_runs = [run for run in runs if run_peaks[run] == 5]
+    if len(test_section_runs) >= target_count:
+        runs = test_section_runs
+
     def tighten_to_dense_core(run, threshold_ratio=0.8):
         start, end = run
         if end <= start:
