@@ -1,4 +1,5 @@
 import base64
+import io
 import json
 import os
 import secrets
@@ -13,6 +14,14 @@ from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from PIL import Image, ImageOps, UnidentifiedImageError
+
+try:
+    import pillow_heif
+
+    pillow_heif.register_heif_opener()
+except ImportError:
+    pass
 
 
 SECTION_CONFIG = {
@@ -130,9 +139,25 @@ def read_image_from_upload(upload: UploadFile) -> np.ndarray:
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
 
     if img is None:
+        img = decode_with_pillow(data)
+
+    if img is None:
         raise HTTPException(status_code=400, detail="Invalid image")
 
     return img
+
+
+def decode_with_pillow(data: bytes):
+    try:
+        with Image.open(io.BytesIO(data)) as pil_img:
+            pil_img = ImageOps.exif_transpose(pil_img)
+            if pil_img.mode != "RGB":
+                pil_img = pil_img.convert("RGB")
+            rgb = np.array(pil_img)
+    except (UnidentifiedImageError, OSError, ValueError):
+        return None
+
+    return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
 
 def preprocess_for_ai(img: np.ndarray) -> np.ndarray:
