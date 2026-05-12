@@ -1912,6 +1912,15 @@ export default function App() {
       return undefined;
     }
 
+    const isHeic =
+      /hei[cf]/i.test(selectedFile.type) ||
+      /\.hei[cf]$/i.test(selectedFile.name);
+
+    if (isHeic) {
+      setSelectedFilePreviewUrl("");
+      return undefined;
+    }
+
     const nextPreviewUrl = URL.createObjectURL(selectedFile);
     setSelectedFilePreviewUrl(nextPreviewUrl);
 
@@ -2435,6 +2444,15 @@ export default function App() {
                   <p className="helper-text">
                     If the page looks cut off, blurry, or tilted here, try
                     another photo before scoring.
+                  </p>
+                </div>
+              ) : selectedFile ? (
+                <div className="photo-preview-card">
+                  <p className="photo-checklist-title">Photo selected</p>
+                  <p className="helper-text">
+                    {selectedFile.name} is an iPhone HEIC file. Your browser
+                    can&rsquo;t show a preview, but the file will upload and
+                    score normally.
                   </p>
                 </div>
               ) : null}

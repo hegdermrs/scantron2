@@ -258,6 +258,10 @@ def preprocess_for_ai(img: np.ndarray, mode: str = "legacy") -> np.ndarray:
         )
 
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+    if mode == "projection":
+        return high_contrast_sheet(gray)
+
     gray = cv2.normalize(gray, None, 0, 255, cv2.NORM_MINMAX)
 
     clahe = cv2.createCLAHE(2.0, (8, 8))
@@ -268,6 +272,13 @@ def preprocess_for_ai(img: np.ndarray, mode: str = "legacy") -> np.ndarray:
     gray = cv2.filter2D(gray, -1, sharpen)
 
     return gray
+
+
+def high_contrast_sheet(gray: np.ndarray) -> np.ndarray:
+    kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (100, 1))
+    black_hat = cv2.morphologyEx(gray, cv2.MORPH_BLACKHAT, kernel)
+    _, binary = cv2.threshold(black_hat, 30, 255, cv2.THRESH_BINARY)
+    return cv2.bitwise_not(binary)
 
 
 def resolve_mode(mode: str) -> str:
