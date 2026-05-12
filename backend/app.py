@@ -25,12 +25,18 @@ except ImportError:
     pass
 
 
-SECTION_CONFIG = {
-    "english": 50,
-    "math": 45,
-    "reading": 36,
-    "science": 40,
+SECTION_LAYOUT = {
+    "english": [10, 10, 10, 10, 10],
+    "math": [10, 10, 10, 10, 5],
+    "reading": [8, 8, 8, 8, 4],
+    "science": [8, 8, 8, 8, 8],
 }
+SECTION_CONFIG = {name: sum(cols) for name, cols in SECTION_LAYOUT.items()}
+BUBBLE_LEFT_SKIP_RATIO = 0.15
+BUBBLE_VERTICAL_MARGIN_RATIO = 0.10
+BUBBLE_HORIZONTAL_MARGIN_RATIO = 0.20
+BUBBLE_MIN_ABS_DARKNESS = 25.0
+BUBBLE_MIN_MARGIN_RATIO = 0.20
 ANSWER_VALUE_MAP = {
     "1": 1,
     "2": 2,
@@ -410,7 +416,7 @@ def build_section_bands(lines, pad_y=15):
     return bands, dividers, bottom
 
 
-def _split_run_recursively(run, row_smooth, min_segment_height=80, min_drop_ratio=0.4):
+def _split_run_recursively(run, row_smooth, min_segment_height=150, min_drop_ratio=0.4):
     start, end = run
     if end - start < 2 * min_segment_height:
         return [run]
@@ -481,12 +487,16 @@ def detect_section_bands_via_projection(gray, pad_y=12):
             detail=f"Projection found {len(runs)} content runs, need {target_count}",
         )
 
+    run_content = {
+        run: float(row_smooth[run[0] : run[1] + 1].sum()) for run in runs
+    }
+
     runs_by_y = sorted(runs, key=lambda run: run[0])
     if len(runs_by_y) == target_count:
         chosen = runs_by_y
     else:
         best_chain = None
-        best_variance = None
+        best_score = None
         for chain in itertools.combinations(runs_by_y, target_count):
             centers = [(run[0] + run[1]) / 2.0 for run in chain]
             spacings = [
@@ -494,10 +504,21 @@ def detect_section_bands_via_projection(gray, pad_y=12):
             ]
             if min(spacings) <= 0:
                 continue
+
             mean_spacing = sum(spacings) / len(spacings)
-            variance = sum((s - mean_spacing) ** 2 for s in spacings) / len(spacings)
-            if best_variance is None or variance < best_variance:
-                best_variance = variance
+            spacing_var = sum((s - mean_spacing) ** 2 for s in spacings) / len(spacings)
+            spacing_cv = (spacing_var ** 0.5) / mean_spacing
+
+            contents = [run_content[run] for run in chain]
+            mean_content = sum(contents) / len(contents)
+            if mean_content <= 0:
+                continue
+            content_var = sum((c - mean_content) ** 2 for c in contents) / len(contents)
+            content_cv = (content_var ** 0.5) / mean_content
+
+            score = spacing_cv + content_cv
+            if best_score is None or score < best_score:
+                best_score = score
                 best_chain = chain
         if best_chain is None:
             raise HTTPException(
@@ -592,6 +613,116 @@ def split_omr(gray, mode="legacy"):
         "debug_blocks": debug_blocks,
         "projection": projection_info,
     }
+
+
+def _bubble_darkness(roi: np.ndarray) -> float:
+    if roi.size == 0:
+        return 0.0
+    return 255.0 - float(roi.mean())
+
+
+def _score_bubble_row(row_gray: np.ndarray, num_bubbles: int = 4):
+    height, width = row_gray.shape[:2]
+    if height < 5 or width < 5:
+        return None, 0.0
+
+    skip = int(width * BUBBLE_LEFT_SKIP_RATIO)
+    if skip >= width - 5:
+        return None, 0.0
+    bubble_zone = row_gray[:, skip:]
+    zone_height, zone_width = bubble_zone.shape[:2]
+
+    v_margin = max(1, int(zone_height * BUBBLE_VERTICAL_MARGIN_RATIO))
+    if zone_height - 2 * v_margin < 5:
+        return None, 0.0
+    bubble_zone = bubble_zone[v_margin : zone_height - v_margin]
+
+    bubble_width = zone_width / num_bubbles
+    darknesses = []
+    for index in range(num_bubbles):
+        bx1 = int(index * bubble_width)
+        bx2 = int((index + 1) * bubble_width)
+        bubble = bubble_zone[:, bx1:bx2]
+        bw = bubble.shape[1]
+        h_margin = int(bw * BUBBLE_HORIZONTAL_MARGIN_RATIO)
+        if bw - 2 * h_margin > 5:
+            bubble = bubble[:, h_margin : bw - h_margin]
+        darknesses.append(_bubble_darkness(bubble))
+
+    sorted_indices = sorted(range(num_bubbles), key=lambda i: darknesses[i], reverse=True)
+    darkest = darknesses[sorted_indices[0]]
+    second = darknesses[sorted_indices[1]]
+
+    if darkest < BUBBLE_MIN_ABS_DARKNESS:
+        return None, 0.0
+
+    margin_ratio = (darkest - second) / darkest if darkest > 0 else 0.0
+    if margin_ratio < BUBBLE_MIN_MARGIN_RATIO:
+        return None, round(margin_ratio, 3)
+
+    return sorted_indices[0] + 1, round(margin_ratio, 3)
+
+
+def score_omr(gray: np.ndarray, bands: dict):
+    answers = {}
+    confidences = {}
+    bubble_grid = {}
+
+    for section_name, total in SECTION_CONFIG.items():
+        if section_name not in bands or section_name not in SECTION_LAYOUT:
+            answers[section_name] = [None] * total
+            confidences[section_name] = [0.0] * total
+            continue
+
+        band = bands[section_name]
+        y1, y2 = band["y1"], band["y2"]
+        x1, x2 = band["x1"], band["x2"]
+        section = gray[y1:y2, x1:x2]
+        if section.size == 0 or y2 <= y1 or x2 <= x1:
+            answers[section_name] = [None] * total
+            confidences[section_name] = [0.0] * total
+            continue
+
+        section_height, section_width = section.shape
+        column_width = section_width / 5.0
+        layout = SECTION_LAYOUT[section_name]
+        section_answers = []
+        section_conf = []
+        section_grid = []
+
+        for column_index in range(5):
+            cx1 = int(column_index * column_width)
+            cx2 = int((column_index + 1) * column_width)
+            column = section[:, cx1:cx2]
+            column_height = column.shape[0]
+            expected_rows = layout[column_index]
+            row_height = column_height / expected_rows
+
+            for row_index in range(expected_rows):
+                ry1 = int(row_index * row_height)
+                ry2 = int((row_index + 1) * row_height)
+                row = column[ry1:ry2]
+                answer, confidence = _score_bubble_row(row)
+                section_answers.append(answer)
+                section_conf.append(confidence)
+                section_grid.append(
+                    {
+                        "column": column_index + 1,
+                        "row": row_index + 1,
+                        "answer": answer,
+                        "confidence": confidence,
+                        "x1": x1 + cx1,
+                        "x2": x1 + cx2,
+                        "y1": y1 + ry1,
+                        "y2": y1 + ry2,
+                    }
+                )
+
+        answers[section_name] = section_answers
+        confidences[section_name] = section_conf
+        bubble_grid[section_name] = section_grid
+
+    return answers, confidences, bubble_grid
 
 
 def _draw_projection_curve(vis, projection_info):
@@ -1683,6 +1814,106 @@ async def debug_route(
     if not ok:
         raise HTTPException(status_code=500, detail="Failed to encode debug image")
 
+    return Response(buf.tobytes(), media_type="image/jpeg")
+
+
+def _bands_for_mode(gray: np.ndarray, mode: str):
+    if mode == "projection":
+        bands, _ = detect_section_bands_via_projection(gray)
+        return bands
+    lines = detect_horizontal_rules(gray)
+    bands, _, _ = build_section_bands(lines)
+    return bands
+
+
+@app.post("/score-omr")
+async def score_route(
+    file: UploadFile = File(...),
+    mode: str = Query(default="projection"),
+):
+    mode = resolve_mode(mode)
+    try:
+        img = read_image_from_upload(file)
+        gray = preprocess_for_ai(img, mode=mode)
+        bands = _bands_for_mode(gray, mode)
+        answers, confidences, _ = score_omr(gray, bands)
+    except HTTPException as exc:
+        if exc.status_code < 500:
+            raise
+        return {
+            "english": [None] * SECTION_CONFIG["english"],
+            "math": [None] * SECTION_CONFIG["math"],
+            "reading": [None] * SECTION_CONFIG["reading"],
+            "science": [None] * SECTION_CONFIG["science"],
+            "_confidences": {name: [0.0] * total for name, total in SECTION_CONFIG.items()},
+            "_status": "partial",
+            "_warnings": [
+                f"Could not score this sheet: {exc.detail}",
+            ],
+        }
+
+    return {
+        **answers,
+        "_confidences": confidences,
+        "_status": "ok",
+        "_warnings": [],
+    }
+
+
+@app.post("/score-debug")
+async def score_debug_route(
+    file: UploadFile = File(...),
+    mode: str = Query(default="projection"),
+):
+    mode = resolve_mode(mode)
+    img = read_image_from_upload(file)
+    gray = preprocess_for_ai(img, mode=mode)
+    bands = _bands_for_mode(gray, mode)
+    _, _, bubble_grid = score_omr(gray, bands)
+
+    vis = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+
+    for section_name, band in bands.items():
+        if section_name not in SECTION_LAYOUT:
+            continue
+        x1, x2 = band["x1"], band["x2"]
+        y1, y2 = band["y1"], band["y2"]
+        cv2.rectangle(vis, (x1, y1), (x2, y2), (255, 0, 0), 2)
+        cv2.putText(
+            vis,
+            section_name,
+            (x1 + 6, y1 + 22),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 0, 0),
+            2,
+        )
+
+    for section_name, cells in bubble_grid.items():
+        for cell in cells:
+            cx1, cy1 = cell["x1"], cell["y1"]
+            cx2, cy2 = cell["x2"], cell["y2"]
+            cell_w = cx2 - cx1
+            skip = int(cell_w * BUBBLE_LEFT_SKIP_RATIO)
+            bz_x1 = cx1 + skip
+            bz_w = (cx2 - bz_x1) / 4.0
+
+            for bubble_index in range(4):
+                bx1 = int(bz_x1 + bubble_index * bz_w)
+                bx2 = int(bz_x1 + (bubble_index + 1) * bz_w)
+                is_pick = cell["answer"] == bubble_index + 1
+                if is_pick:
+                    high_conf = cell["confidence"] >= 0.3
+                    color = (0, 220, 0) if high_conf else (0, 165, 255)
+                    thickness = 2
+                else:
+                    color = (120, 120, 120)
+                    thickness = 1
+                cv2.rectangle(vis, (bx1, cy1), (bx2, cy2), color, thickness)
+
+    ok, buf = cv2.imencode(".jpg", vis, [int(cv2.IMWRITE_JPEG_QUALITY), 90])
+    if not ok:
+        raise HTTPException(status_code=500, detail="Failed to encode debug image")
     return Response(buf.tobytes(), media_type="image/jpeg")
 
 
