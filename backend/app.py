@@ -10,7 +10,7 @@ from pathlib import Path
 import cv2
 import httpx
 import numpy as np
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -56,6 +56,9 @@ PARSE_WEBHOOK_URL = os.getenv(
     "PARSE_WEBHOOK_URL", "https://rmrs.app.n8n.cloud/webhook/omr-upload"
 )
 MAX_PROCESSING_DIMENSION = int(os.getenv("MAX_PROCESSING_DIMENSION", "2200"))
+RECTIFIED_WIDTH = 1700
+RECTIFIED_HEIGHT = 2200
+PIPELINE_MODES = {"legacy", "rectified"}
 
 app = FastAPI(title="OMR Pipeline")
 security = HTTPBasic()
@@ -160,9 +163,64 @@ def decode_with_pillow(data: bytes):
     return cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
 
 
-def preprocess_for_ai(img: np.ndarray) -> np.ndarray:
+def order_quad_corners(quad: np.ndarray) -> np.ndarray:
+    summed = quad.sum(axis=1)
+    diffed = np.diff(quad, axis=1).ravel()
+    ordered = np.zeros((4, 2), dtype=np.float32)
+    ordered[0] = quad[np.argmin(summed)]
+    ordered[2] = quad[np.argmax(summed)]
+    ordered[1] = quad[np.argmin(diffed)]
+    ordered[3] = quad[np.argmax(diffed)]
+    return ordered
+
+
+def find_sheet_quad(img: np.ndarray):
+    height, width = img.shape[:2]
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY) if img.ndim == 3 else img
+    blurred = cv2.GaussianBlur(gray, (5, 5), 0)
+    edges = cv2.Canny(blurred, 30, 120)
+    kernel = np.ones((5, 5), np.uint8)
+    edges = cv2.dilate(edges, kernel, iterations=2)
+
+    contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = sorted(contours, key=cv2.contourArea, reverse=True)[:5]
+
+    image_area = float(width * height)
+    for contour in contours:
+        if cv2.contourArea(contour) < 0.3 * image_area:
+            return None
+        perimeter = cv2.arcLength(contour, True)
+        approx = cv2.approxPolyDP(contour, 0.02 * perimeter, True)
+        if len(approx) == 4 and cv2.isContourConvex(approx):
+            return approx.reshape(4, 2).astype(np.float32)
+    return None
+
+
+def rectify_sheet(img: np.ndarray) -> np.ndarray:
+    quad = find_sheet_quad(img)
+    if quad is None:
+        return img
+
+    ordered = order_quad_corners(quad)
+    target = np.array(
+        [
+            [0, 0],
+            [RECTIFIED_WIDTH, 0],
+            [RECTIFIED_WIDTH, RECTIFIED_HEIGHT],
+            [0, RECTIFIED_HEIGHT],
+        ],
+        dtype=np.float32,
+    )
+    transform = cv2.getPerspectiveTransform(ordered, target)
+    return cv2.warpPerspective(img, transform, (RECTIFIED_WIDTH, RECTIFIED_HEIGHT))
+
+
+def preprocess_for_ai(img: np.ndarray, mode: str = "legacy") -> np.ndarray:
     if img.shape[1] > img.shape[0]:
         img = cv2.rotate(img, cv2.ROTATE_90_CLOCKWISE)
+
+    if mode == "rectified":
+        img = rectify_sheet(img)
 
     height, width = img.shape[:2]
     largest_dimension = max(height, width)
@@ -185,6 +243,15 @@ def preprocess_for_ai(img: np.ndarray) -> np.ndarray:
     gray = cv2.filter2D(gray, -1, sharpen)
 
     return gray
+
+
+def resolve_mode(mode: str) -> str:
+    if mode not in PIPELINE_MODES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown mode '{mode}'. Allowed: {sorted(PIPELINE_MODES)}",
+        )
+    return mode
 
 
 def encode_crop_base64(img: np.ndarray) -> str:
@@ -1280,10 +1347,14 @@ async def parse_omr_route(
 
 
 @app.post("/split-omr")
-async def split_route(file: UploadFile = File(...)):
+async def split_route(
+    file: UploadFile = File(...),
+    mode: str = Query(default="legacy"),
+):
+    mode = resolve_mode(mode)
     try:
         img = read_image_from_upload(file)
-        gray = preprocess_for_ai(img)
+        gray = preprocess_for_ai(img, mode=mode)
         blocks, debug_info = split_omr(gray)
     except HTTPException as exc:
         if exc.status_code < 500:
@@ -1327,9 +1398,13 @@ async def split_route(file: UploadFile = File(...)):
 
 
 @app.post("/debug-boxes")
-async def debug_route(file: UploadFile = File(...)):
+async def debug_route(
+    file: UploadFile = File(...),
+    mode: str = Query(default="legacy"),
+):
+    mode = resolve_mode(mode)
     img = read_image_from_upload(file)
-    gray = preprocess_for_ai(img)
+    gray = preprocess_for_ai(img, mode=mode)
 
     lines = detect_horizontal_rules(gray)
     debug_info = {
@@ -1377,9 +1452,13 @@ async def debug_route(file: UploadFile = File(...)):
 
 
 @app.post("/preprocess-omr")
-async def preprocess_route(file: UploadFile = File(...)):
+async def preprocess_route(
+    file: UploadFile = File(...),
+    mode: str = Query(default="legacy"),
+):
+    mode = resolve_mode(mode)
     img = read_image_from_upload(file)
-    gray = preprocess_for_ai(img)
+    gray = preprocess_for_ai(img, mode=mode)
 
     ok, buf = cv2.imencode(".jpg", gray, [int(cv2.IMWRITE_JPEG_QUALITY), 95])
     if not ok:
