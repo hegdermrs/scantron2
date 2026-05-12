@@ -596,12 +596,64 @@ def detect_section_bands_via_projection(gray, pad_y=12):
     }
 
 
+COLUMN_PEAK_EDGE_RATIO = 0.25
+COLUMN_CROP_CLEARANCE = 20
+COLUMN_PEAK_MIN_DISTANCE = 180
+
+
+def find_column_peak_bounds(gray, y_top, y_bottom, expected=5):
+    if y_bottom <= y_top:
+        return None
+    _, mask = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
+    sub_mask = mask[y_top : y_bottom + 1, :]
+    col_density = sub_mask.sum(axis=0).astype(np.float32) / 255.0
+    kernel = np.ones(11, dtype=np.float32) / 11.0
+    smooth = np.convolve(col_density, kernel, mode="same")
+
+    candidates = []
+    for x in range(1, len(smooth) - 1):
+        if smooth[x] > smooth[x - 1] and smooth[x] >= smooth[x + 1]:
+            candidates.append((x, float(smooth[x])))
+
+    candidates.sort(key=lambda c: c[1], reverse=True)
+
+    selected = []
+    for x, value in candidates:
+        if all(abs(x - other_x) >= COLUMN_PEAK_MIN_DISTANCE for other_x, _ in selected):
+            selected.append((x, value))
+        if len(selected) >= expected:
+            break
+
+    if len(selected) < expected:
+        return None
+
+    selected.sort(key=lambda p: p[0])
+
+    bounds = []
+    for x, peak_value in selected:
+        edge = peak_value * COLUMN_PEAK_EDGE_RATIO
+        left = x
+        while left > 0 and smooth[left - 1] > edge:
+            left -= 1
+        right = x
+        while right < len(smooth) - 1 and smooth[right + 1] > edge:
+            right += 1
+        bounds.append((int(left), int(right)))
+
+    return bounds
+
+
 def split_omr(gray, mode="legacy"):
+    column_bounds = None
     if mode == "projection":
         bands, projection_info = detect_section_bands_via_projection(gray)
         lines = []
         dividers = []
         bottom = None
+        if bands:
+            test_top = min(b["y1"] for b in bands.values())
+            test_bottom = max(b["y2"] for b in bands.values())
+            column_bounds = find_column_peak_bounds(gray, test_top, test_bottom)
     else:
         lines = detect_horizontal_rules(gray)
         bands, dividers, bottom = build_section_bands(lines, pad_y=15)
@@ -609,6 +661,8 @@ def split_omr(gray, mode="legacy"):
 
     results = []
     debug_blocks = []
+
+    image_h, image_w = gray.shape[:2]
 
     for name, band in bands.items():
         y1 = band["y1"]
@@ -619,29 +673,49 @@ def split_omr(gray, mode="legacy"):
         if y2 <= y1 or x2 <= x1:
             continue
 
-        section = gray[y1:y2, x1:x2]
-        _, section_width = section.shape
-        column_width = section_width / 5.0
-
-        for column_index in range(5):
-            crop_x1 = int(round(column_index * column_width))
-            crop_x2 = int(round((column_index + 1) * column_width))
-            crop = section[:, crop_x1:crop_x2]
-
-            results.append(
-                {
-                    "section": name,
-                    "column": column_index + 1,
-                    "image": encode_crop_base64(crop),
-                }
-            )
-            debug_blocks.append(
-                {
-                    "section": name,
-                    "column": column_index,
-                    "coords": (x1 + crop_x1, y1, x1 + crop_x2, y2),
-                }
-            )
+        if column_bounds is not None:
+            crop_y1 = max(0, y1 - COLUMN_CROP_CLEARANCE)
+            crop_y2 = min(image_h, y2 + COLUMN_CROP_CLEARANCE)
+            for column_index, (col_left, col_right) in enumerate(column_bounds):
+                crop_x1 = max(0, col_left - COLUMN_CROP_CLEARANCE)
+                crop_x2 = min(image_w, col_right + COLUMN_CROP_CLEARANCE)
+                crop = gray[crop_y1:crop_y2, crop_x1:crop_x2]
+                results.append(
+                    {
+                        "section": name,
+                        "column": column_index + 1,
+                        "image": encode_crop_base64(crop),
+                    }
+                )
+                debug_blocks.append(
+                    {
+                        "section": name,
+                        "column": column_index,
+                        "coords": (crop_x1, crop_y1, crop_x2, crop_y2),
+                    }
+                )
+        else:
+            section = gray[y1:y2, x1:x2]
+            _, section_width = section.shape
+            column_width = section_width / 5.0
+            for column_index in range(5):
+                crop_x1 = int(round(column_index * column_width))
+                crop_x2 = int(round((column_index + 1) * column_width))
+                crop = section[:, crop_x1:crop_x2]
+                results.append(
+                    {
+                        "section": name,
+                        "column": column_index + 1,
+                        "image": encode_crop_base64(crop),
+                    }
+                )
+                debug_blocks.append(
+                    {
+                        "section": name,
+                        "column": column_index,
+                        "coords": (x1 + crop_x1, y1, x1 + crop_x2, y2),
+                    }
+                )
 
     return results, {
         "lines": lines,
@@ -650,6 +724,7 @@ def split_omr(gray, mode="legacy"):
         "bands": bands,
         "debug_blocks": debug_blocks,
         "projection": projection_info,
+        "column_bounds": column_bounds,
     }
 
 
@@ -1793,11 +1868,16 @@ async def debug_route(
     }
     warning = None
 
+    column_bounds = None
     if mode == "projection":
         try:
             bands, projection_info = detect_section_bands_via_projection(gray)
             debug_info["bands"] = bands
             debug_info["projection"] = projection_info
+            if bands:
+                test_top = min(b["y1"] for b in bands.values())
+                test_bottom = max(b["y2"] for b in bands.values())
+                column_bounds = find_column_peak_bounds(gray, test_top, test_bottom)
         except HTTPException as exc:
             warning = exc.detail
     else:
@@ -1815,6 +1895,22 @@ async def debug_route(
 
     if mode == "projection" and "projection" in debug_info and debug_info["projection"] is not None:
         _draw_projection_curve(vis, debug_info["projection"])
+
+    if column_bounds is not None and debug_info["bands"]:
+        image_h, image_w = vis.shape[:2]
+        for band in debug_info["bands"].values():
+            crop_y1 = max(0, band["y1"] - COLUMN_CROP_CLEARANCE)
+            crop_y2 = min(image_h, band["y2"] + COLUMN_CROP_CLEARANCE)
+            for col_left, col_right in column_bounds:
+                crop_x1 = max(0, col_left - COLUMN_CROP_CLEARANCE)
+                crop_x2 = min(image_w, col_right + COLUMN_CROP_CLEARANCE)
+                cv2.rectangle(
+                    vis,
+                    (crop_x1, crop_y1),
+                    (crop_x2, crop_y2),
+                    (0, 165, 255),
+                    2,
+                )
     overlay_y = 36
     if rectify_status:
         cv2.putText(
