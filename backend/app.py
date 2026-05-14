@@ -11,7 +11,7 @@ from pathlib import Path
 import cv2
 import httpx
 import numpy as np
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -54,6 +54,7 @@ ANSWER_VALUE_MAP = {
 NULL_MARKERS = {"", "-", "NULL", "NONE", "BLANK", "N/A", "NA"}
 DATA_DIR = Path(__file__).resolve().parent / "data"
 DB_PATH = DATA_DIR / "tests.sqlite3"
+FEEDBACK_LOG_PATH = DATA_DIR / "answer_feedback.jsonl"
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "admin")
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "omr123")
 ANTHROPIC_MODEL = os.getenv(
@@ -1606,6 +1607,29 @@ def require_admin(credentials: HTTPBasicCredentials = Depends(security)):
 @app.get("/health")
 def health():
     return {"status": "ok", "tests": len(list_tests(include_answer_keys=False))}
+
+
+@app.post("/feedback")
+def submit_feedback(payload: dict = Body(...)):
+    allowed_keys = {
+        "testId",
+        "testName",
+        "section",
+        "questionNumber",
+        "detectedNumeric",
+        "detectedLetter",
+        "expectedNumeric",
+        "source",
+        "timestamp",
+    }
+    cleaned = {k: payload.get(k) for k in allowed_keys if k in payload}
+    cleaned["receivedAt"] = utc_now_iso()
+
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    with FEEDBACK_LOG_PATH.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(cleaned, ensure_ascii=False) + "\n")
+
+    return {"ok": True}
 
 
 @app.get("/tests")

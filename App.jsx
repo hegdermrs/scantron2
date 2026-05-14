@@ -13,6 +13,9 @@ const BACKEND_BASE_URL = (
 const TESTS_ENDPOINT = `${BACKEND_BASE_URL}/tests`;
 const ADMIN_TESTS_ENDPOINT = `${BACKEND_BASE_URL}/admin/tests`;
 const ADMIN_IMPORT_ENDPOINT = `${BACKEND_BASE_URL}/admin/tests/import-pdf`;
+const FEEDBACK_ENDPOINT = `${BACKEND_BASE_URL}/feedback`;
+
+const LETTER_TO_NUMERIC = { A: 1, B: 2, C: 3, D: 4, F: 1, G: 2, H: 3, J: 4 };
 
 const API_ENDPOINTS = {
   parse: {
@@ -858,6 +861,124 @@ const styles = `
   .answer-card.filled {
     color: var(--filled);
     background: rgba(255, 255, 255, 0.85);
+  }
+
+  .answer-card.correct {
+    background: rgba(34, 197, 94, 0.18);
+    border-color: rgba(34, 197, 94, 0.55);
+    color: #14532d;
+  }
+
+  .answer-card.correct .answer-value {
+    color: #166534;
+    text-shadow: 0 0 0.5px rgba(22, 101, 52, 0.45);
+  }
+
+  .answer-card.incorrect {
+    background: rgba(239, 68, 68, 0.18);
+    border-color: rgba(239, 68, 68, 0.55);
+    color: #7f1d1d;
+  }
+
+  .answer-card.incorrect .answer-value {
+    color: #991b1b;
+    text-shadow: 0 0 0.5px rgba(153, 27, 27, 0.45);
+  }
+
+  .answer-card.flagged {
+    outline: 2px dashed rgba(202, 138, 4, 0.7);
+    outline-offset: 2px;
+  }
+
+  .answer-card-body {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 6px;
+  }
+
+  .answer-flag-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 0.9rem;
+    line-height: 1;
+    padding: 2px 4px;
+    border-radius: 6px;
+    opacity: 0.45;
+    transition: opacity 0.15s ease, background 0.15s ease, transform 0.15s ease;
+  }
+
+  .answer-flag-btn:hover {
+    opacity: 1;
+    background: rgba(0, 0, 0, 0.05);
+  }
+
+  .answer-flag-btn.is-flagged {
+    opacity: 1;
+    background: rgba(202, 138, 4, 0.18);
+    transform: scale(1.05);
+  }
+
+  .entry-mode-toggle {
+    display: inline-flex;
+    border: 1px solid rgba(31, 111, 95, 0.25);
+    border-radius: 999px;
+    padding: 3px;
+    background: rgba(255, 255, 255, 0.7);
+    align-self: flex-start;
+  }
+
+  .entry-mode-toggle button {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 7px 16px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--muted);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+  }
+
+  .entry-mode-toggle button.active {
+    background: var(--accent, #1f6f5f);
+    color: #fff;
+  }
+
+  .manual-entry-section {
+    display: grid;
+    gap: 10px;
+  }
+
+  .manual-entry-section h4 {
+    margin: 0;
+    font-size: 0.95rem;
+  }
+
+  .manual-entry-section textarea {
+    width: 100%;
+    min-height: 70px;
+    border-radius: 12px;
+    padding: 10px 12px;
+    border: 1px solid rgba(59, 48, 36, 0.18);
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 0.95rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    resize: vertical;
+  }
+
+  .manual-entry-counter {
+    font-size: 0.8rem;
+    color: var(--muted);
+  }
+
+  .manual-entry-counter.complete {
+    color: #166534;
+    font-weight: 600;
   }
 
   .answer-question {
@@ -1769,6 +1890,16 @@ export default function App() {
   const [isSavingTest, setIsSavingTest] = useState(false);
   const [adminUploadResetKey, setAdminUploadResetKey] = useState(0);
 
+  const [entryMode, setEntryMode] = useState("scan");
+  const [manualAnswers, setManualAnswers] = useState(() =>
+    SECTION_CONFIG.reduce((acc, { key }) => {
+      acc[key] = "";
+      return acc;
+    }, {})
+  );
+  const [resultsSource, setResultsSource] = useState(null);
+  const [flaggedAnswers, setFlaggedAnswers] = useState(() => new Set());
+
   const selectedTest = useMemo(
     () =>
       availableTests.find((test) => String(test.id) === String(selectedTestId)) ||
@@ -2005,7 +2136,107 @@ export default function App() {
     setUploadSuccess("");
     setIsAnswerReviewOpen(false);
     setFileInputResetKey((current) => current + 1);
+    setResultsSource(null);
+    setFlaggedAnswers(new Set());
     window.setTimeout(handleBackToUpload, 80);
+  };
+
+  const parseManualSection = (text, total) => {
+    const letters = String(text || "")
+      .toUpperCase()
+      .replace(/[^A-DFGHJ]/g, "")
+      .split("");
+    const answers = Array(total).fill(null);
+    for (let i = 0; i < Math.min(letters.length, total); i += 1) {
+      const numeric = LETTER_TO_NUMERIC[letters[i]];
+      if (numeric) {
+        answers[i] = numeric;
+      }
+    }
+    return answers;
+  };
+
+  const manualCounts = useMemo(
+    () =>
+      SECTION_CONFIG.reduce((acc, { key, total }) => {
+        const answers = parseManualSection(manualAnswers[key], total);
+        acc[key] = answers.filter((value) => value != null).length;
+        return acc;
+      }, {}),
+    [manualAnswers]
+  );
+
+  const manualHasAny = useMemo(
+    () => Object.values(manualCounts).some((count) => count > 0),
+    [manualCounts]
+  );
+
+  const handleManualChange = (sectionKey, value) => {
+    setManualAnswers((current) => ({ ...current, [sectionKey]: value }));
+  };
+
+  const handleManualSubmit = (event) => {
+    event.preventDefault();
+    if (!selectedTestId) {
+      setError("Please select a test before scoring your answers.");
+      return;
+    }
+    if (!manualHasAny) {
+      setError("Type at least one answer before scoring.");
+      return;
+    }
+    setError("");
+    setUploadSuccess("");
+    setApiPreview(null);
+    setFlaggedAnswers(new Set());
+    const payload = SECTION_CONFIG.reduce((acc, { key, total }) => {
+      acc[key] = parseManualSection(manualAnswers[key], total);
+      return acc;
+    }, {});
+    setResults(payload);
+    setResultsSource("manual");
+    setUploadSuccess("Your answers were scored against the answer key.");
+    setIsAnswerReviewOpen(true);
+    window.setTimeout(() => {
+      resultsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 80);
+  };
+
+  const toggleFlag = (sectionKey, questionNumber, detectedNumeric, detectedLetter) => {
+    const flagKey = `${sectionKey}-${questionNumber}`;
+    setFlaggedAnswers((current) => {
+      const next = new Set(current);
+      const wasFlagged = next.has(flagKey);
+      if (wasFlagged) {
+        next.delete(flagKey);
+      } else {
+        next.add(flagKey);
+      }
+
+      if (!wasFlagged) {
+        const sectionConfig = PRACTICE_TEST_1_SCORING[sectionKey] || null;
+        const expectedNumeric =
+          sectionConfig?.answerKey?.[questionNumber] ?? null;
+        fetch(FEEDBACK_ENDPOINT, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            testId: selectedTest?.id ?? null,
+            testName: selectedTest?.name ?? null,
+            section: sectionKey,
+            questionNumber,
+            detectedNumeric,
+            detectedLetter,
+            expectedNumeric,
+            source: resultsSource || "scan",
+            timestamp: new Date().toISOString(),
+          }),
+        }).catch(() => {
+          /* fire-and-forget; ignore network errors */
+        });
+      }
+      return next;
+    });
   };
 
   const runEndpointAction = async (actionKey) => {
@@ -2052,6 +2283,8 @@ export default function App() {
 
       if (normalizedResults) {
         setResults(normalizedResults);
+        setResultsSource("scan");
+        setFlaggedAnswers(new Set());
         setUploadSuccess(endpoint.successMessage);
       } else {
         setApiPreview({
@@ -2077,6 +2310,10 @@ export default function App() {
 
   const handleUpload = async (event) => {
     event.preventDefault();
+    if (entryMode === "manual") {
+      handleManualSubmit(event);
+      return;
+    }
     await runEndpointAction("parse");
   };
 
@@ -2417,6 +2654,31 @@ export default function App() {
               {testsError ? <div className="message error">{testsError}</div> : null}
 
               <div className="field">
+                <label>How would you like to enter answers?</label>
+                <div className="entry-mode-toggle" role="tablist">
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={entryMode === "scan"}
+                    className={entryMode === "scan" ? "active" : ""}
+                    onClick={() => setEntryMode("scan")}
+                  >
+                    Scan a sheet
+                  </button>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={entryMode === "manual"}
+                    className={entryMode === "manual" ? "active" : ""}
+                    onClick={() => setEntryMode("manual")}
+                  >
+                    Type my answers
+                  </button>
+                </div>
+              </div>
+
+              {entryMode === "scan" ? (
+              <div className="field">
                 <label htmlFor="omr-file">Upload answer sheet</label>
                 <div className="file-pick">
                   <input
@@ -2432,8 +2694,43 @@ export default function App() {
                   </div>
                 </div>
               </div>
+              ) : (
+              <div className="field">
+                <p className="helper-text">
+                  Type your answers below. Use letters only (A-D for odd
+                  questions, F-J for even). Spaces, commas, and line breaks are
+                  ignored, so &quot;ABCD&quot; and &quot;A B C D&quot; both work.
+                </p>
+                {SECTION_CONFIG.map(({ key, title, total }) => {
+                  const count = manualCounts[key] || 0;
+                  const isComplete = count === total;
+                  return (
+                    <div key={`manual-${key}`} className="manual-entry-section">
+                      <h4>
+                        {title}{" "}
+                        <span
+                          className={`manual-entry-counter ${
+                            isComplete ? "complete" : ""
+                          }`}
+                        >
+                          {count} / {total} answers
+                        </span>
+                      </h4>
+                      <textarea
+                        value={manualAnswers[key]}
+                        onChange={(event) =>
+                          handleManualChange(key, event.target.value)
+                        }
+                        placeholder={`Type ${total} letters for ${title}`}
+                        spellCheck={false}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+              )}
 
-              {selectedFilePreviewUrl ? (
+              {entryMode === "scan" && selectedFilePreviewUrl ? (
                 <div className="photo-preview-card">
                   <p className="photo-checklist-title">Preview your photo</p>
                   <img
@@ -2446,7 +2743,7 @@ export default function App() {
                     another photo before scoring.
                   </p>
                 </div>
-              ) : selectedFile ? (
+              ) : entryMode === "scan" && selectedFile ? (
                 <div className="photo-preview-card">
                   <p className="photo-checklist-title">Photo selected</p>
                   <p className="helper-text">
@@ -2457,6 +2754,7 @@ export default function App() {
                 </div>
               ) : null}
 
+              {entryMode === "scan" ? (
               <div className="photo-checklist" aria-label="Photo checklist">
                 <p className="photo-checklist-title">Before you upload, check the photo:</p>
                 <div className="photo-checklist-grid">
@@ -2490,6 +2788,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
+              ) : null}
 
               {error ? <div className="message error">{error}</div> : null}
               {uploadSuccess ? (
@@ -2518,9 +2817,17 @@ export default function App() {
                   <button
                     type="submit"
                     className="primary-button"
-                    disabled={isLoading || !selectedFile || !selectedTestId}
+                    disabled={
+                      isLoading ||
+                      !selectedTestId ||
+                      (entryMode === "scan" ? !selectedFile : !manualHasAny)
+                    }
                   >
-                    {isLoading ? "Building Your Report..." : "Get My Results"}
+                    {isLoading
+                      ? "Building Your Report..."
+                      : entryMode === "manual"
+                        ? "Score My Answers"
+                        : "Get My Results"}
                   </button>
                 )}
               </div>
@@ -2766,18 +3073,76 @@ export default function App() {
                           const questionNumber = index + 1;
                           const mappedAnswer = mapAnswer(value, questionNumber);
                           const isBlank = mappedAnswer === "-";
+                          const sectionScoringConfig =
+                            practiceTest1ScoringState.isPracticeTest1
+                              ? PRACTICE_TEST_1_SCORING[key] || null
+                              : null;
+                          const expectedNumeric =
+                            sectionScoringConfig?.answerKey?.[questionNumber] ??
+                            null;
+                          const isScored =
+                            expectedNumeric != null &&
+                            !(sectionScoringConfig?.notScored?.has(
+                              questionNumber
+                            ));
+                          let correctnessClass = "";
+                          if (isScored && !isBlank && value != null) {
+                            correctnessClass =
+                              Number(value) === expectedNumeric
+                                ? "correct"
+                                : "incorrect";
+                          }
+                          const flagKey = `${key}-${questionNumber}`;
+                          const isFlagged = flaggedAnswers.has(flagKey);
+                          const canFlag =
+                            resultsSource === "scan" && !isBlank;
 
                           return (
                             <div
                               key={`${key}-${questionNumber}`}
                               className={`answer-card ${
                                 isBlank ? "blank" : "filled"
-                              }`}
+                              } ${correctnessClass} ${
+                                isFlagged ? "flagged" : ""
+                              }`.trim()}
                             >
                               <div className="answer-question">
                                 Q{questionNumber}
                               </div>
-                              <div className="answer-value">{mappedAnswer}</div>
+                              <div className="answer-card-body">
+                                <div className="answer-value">
+                                  {mappedAnswer}
+                                </div>
+                                {canFlag ? (
+                                  <button
+                                    type="button"
+                                    className={`answer-flag-btn ${
+                                      isFlagged ? "is-flagged" : ""
+                                    }`}
+                                    aria-pressed={isFlagged}
+                                    aria-label={
+                                      isFlagged
+                                        ? `Undo misread report for question ${questionNumber}`
+                                        : `Report question ${questionNumber} as misread`
+                                    }
+                                    title={
+                                      isFlagged
+                                        ? "Reported as misread"
+                                        : "Report this letter as misread"
+                                    }
+                                    onClick={() =>
+                                      toggleFlag(
+                                        key,
+                                        questionNumber,
+                                        value,
+                                        mappedAnswer
+                                      )
+                                    }
+                                  >
+                                    {"👎"}
+                                  </button>
+                                ) : null}
+                              </div>
                             </div>
                           );
                         })}
