@@ -20,8 +20,10 @@ const AUTH_LOGOUT_ENDPOINT = `${BACKEND_BASE_URL}/auth/logout`;
 const AUTH_ME_ENDPOINT = `${BACKEND_BASE_URL}/auth/me`;
 const MY_RESULTS_ENDPOINT = `${BACKEND_BASE_URL}/me/results`;
 const SAVE_RESULT_ENDPOINT = `${BACKEND_BASE_URL}/me/results`;
+const EMAIL_RESULTS_ENDPOINT = `${BACKEND_BASE_URL}/me/email-results`;
 const ADMIN_USERS_ENDPOINT = `${BACKEND_BASE_URL}/admin/users`;
 const ADMIN_ALL_RESULTS_ENDPOINT = `${BACKEND_BASE_URL}/admin/results`;
+const ADMIN_ANALYTICS_ENDPOINT = `${BACKEND_BASE_URL}/admin/analytics`;
 const SET_USER_ROLE_ENDPOINT = (id) => `${BACKEND_BASE_URL}/admin/users/${id}/role`;
 
 const LETTER_TO_NUMERIC = { A: 1, B: 2, C: 3, D: 4, F: 1, G: 2, H: 3, J: 4 };
@@ -1313,6 +1315,75 @@ const styles = `
     cursor: pointer;
   }
 
+  .email-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 18px;
+    border-radius: 999px;
+    border: 1.5px solid var(--accent, #1f6f5f);
+    background: transparent;
+    color: var(--accent, #1f6f5f);
+    font-weight: 700;
+    font-size: 0.875rem;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s;
+  }
+
+  .email-btn:hover:not(:disabled) {
+    background: var(--accent, #1f6f5f);
+    color: #fff;
+  }
+
+  .email-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
+  .analytics-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+
+  .analytics-card {
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(59, 48, 36, 0.08);
+    border-radius: 16px;
+    padding: 16px 18px;
+    display: grid;
+    gap: 4px;
+  }
+
+  .analytics-value {
+    font-size: 1.8rem;
+    font-weight: 800;
+    color: var(--accent, #1f6f5f);
+    line-height: 1.1;
+  }
+
+  .analytics-label {
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .section-score-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid rgba(59, 48, 36, 0.07);
+    font-size: 0.875rem;
+  }
+
+  .section-score-row:last-child {
+    border-bottom: none;
+  }
+
   .educator-tabs {
     display: flex;
     gap: 4px;
@@ -2131,10 +2202,15 @@ export default function App() {
   const [myResultsLoading, setMyResultsLoading] = useState(false);
 
   // Educator view
-  const [educatorTab, setEducatorTab] = useState("users"); // "users" | "results"
+  const [educatorTab, setEducatorTab] = useState("users"); // "users" | "results" | "analytics"
   const [educatorUsers, setEducatorUsers] = useState(null);
   const [educatorResults, setEducatorResults] = useState(null);
+  const [educatorAnalytics, setEducatorAnalytics] = useState(null);
   const [educatorLoading, setEducatorLoading] = useState(false);
+
+  // Email results
+  const [emailSending, setEmailSending] = useState(false);
+  const [emailStatus, setEmailStatus] = useState(""); // "" | "sent" | "error"
 
   const selectedTest = useMemo(
     () =>
@@ -2289,41 +2365,70 @@ export default function App() {
     }
   }, [currentUser, loadMyResults]);
 
-  // Save manual results to server when logged in
+  // Save results (scan or manual) with scores once available
   useEffect(() => {
-    if (!currentUser || resultsSource !== "manual" || !results) return;
+    if (!currentUser || !results || !resultsSource) return;
+    // Wait until scoring has been attempted (scores may be null if not practice test 1)
+    const scores = practiceTest1ScoringState.scores ?? null;
     fetch(SAVE_RESULT_ENDPOINT, {
       method: "POST",
       credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         results,
+        scores,
         testId: selectedTest?.id ?? null,
         testName: selectedTest?.name ?? null,
-        source: "manual",
+        source: resultsSource,
       }),
     })
       .then((r) => r.ok && loadMyResults())
       .catch(() => {});
-  }, [results, resultsSource]);
+  }, [results, resultsSource, practiceTest1ScoringState.scores]);
 
   // ─── Educator data ─────────────────────────────────────
   const loadEducatorData = useCallback(async () => {
     if (!currentUser || currentUser.role !== "educator") return;
     setEducatorLoading(true);
     try {
-      const [usersRes, resultsRes] = await Promise.all([
+      const [usersRes, resultsRes, analyticsRes] = await Promise.all([
         fetch(ADMIN_USERS_ENDPOINT, { credentials: "include" }),
         fetch(ADMIN_ALL_RESULTS_ENDPOINT, { credentials: "include" }),
+        fetch(ADMIN_ANALYTICS_ENDPOINT, { credentials: "include" }),
       ]);
       if (usersRes.ok) setEducatorUsers((await usersRes.json()).users || []);
       if (resultsRes.ok) setEducatorResults((await resultsRes.json()).results || []);
+      if (analyticsRes.ok) setEducatorAnalytics(await analyticsRes.json());
     } catch {
       /* silent */
     } finally {
       setEducatorLoading(false);
     }
   }, [currentUser]);
+
+  const handleSendEmail = async () => {
+    if (!currentUser || emailSending) return;
+    setEmailSending(true);
+    setEmailStatus("");
+    try {
+      const response = await fetch(EMAIL_RESULTS_ENDPOINT, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          testName: selectedTest?.name ?? null,
+          answers: results,
+          scores: practiceTest1ScoringState.scores ?? null,
+          createdAt: new Date().toISOString().slice(0, 10),
+        }),
+      });
+      setEmailStatus(response.ok ? "sent" : "error");
+    } catch {
+      setEmailStatus("error");
+    } finally {
+      setEmailSending(false);
+    }
+  };
 
   useEffect(() => {
     if (currentUser?.role === "educator") loadEducatorData();
@@ -2504,6 +2609,7 @@ export default function App() {
     setFileInputResetKey((current) => current + 1);
     setResultsSource(null);
     setFlaggedAnswers(new Set());
+    setEmailStatus("");
     window.setTimeout(handleBackToUpload, 80);
     if (currentUser?.role === "student") loadMyResults();
   };
@@ -3381,7 +3487,34 @@ export default function App() {
                 >
                   Start a New Scan
                 </button>
+                {currentUser ? (
+                  <button
+                    type="button"
+                    className="email-btn"
+                    disabled={emailSending}
+                    onClick={handleSendEmail}
+                  >
+                    {emailSending ? "Sending…" : "✉ Email my results"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="email-btn"
+                    onClick={() => openAuthModal("register")}
+                  >
+                    ✉ Email my results
+                  </button>
+                )}
               </div>
+              {emailStatus === "sent" ? (
+                <div className="message success" style={{ marginTop: 10 }}>
+                  Report sent to {currentUser?.email}. Check your inbox!
+                </div>
+              ) : emailStatus === "error" ? (
+                <div className="message error" style={{ marginTop: 10 }}>
+                  Could not send the email. Please try again.
+                </div>
+              ) : null}
             </section>
 
             {results._status === "partial" || results._warnings?.length ? (
@@ -3722,6 +3855,7 @@ export default function App() {
             <div className="educator-tabs">
               <button className={`educator-tab ${educatorTab === "users" ? "active" : ""}`} onClick={() => setEducatorTab("users")}>Students</button>
               <button className={`educator-tab ${educatorTab === "results" ? "active" : ""}`} onClick={() => setEducatorTab("results")}>All Results</button>
+              <button className={`educator-tab ${educatorTab === "analytics" ? "active" : ""}`} onClick={() => setEducatorTab("analytics")}>Analytics</button>
             </div>
             {educatorLoading ? (
               <p className="helper-text">Loading…</p>
@@ -3759,7 +3893,7 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
-            ) : (
+            ) : educatorTab === "results" ? (
               <div style={{ overflowX: "auto" }}>
                 <table className="data-table">
                   <thead>
@@ -3782,7 +3916,53 @@ export default function App() {
                   </tbody>
                 </table>
               </div>
-            )}
+            ) : educatorTab === "analytics" ? (
+              educatorAnalytics ? (
+                <>
+                  <div className="analytics-grid">
+                    <div className="analytics-card">
+                      <div className="analytics-value">{educatorAnalytics.totalStudents ?? "—"}</div>
+                      <div className="analytics-label">Students</div>
+                    </div>
+                    <div className="analytics-card">
+                      <div className="analytics-value">{educatorAnalytics.totalScans ?? "—"}</div>
+                      <div className="analytics-label">Total Scans</div>
+                    </div>
+                  </div>
+
+                  {educatorAnalytics.avgScores && Object.values(educatorAnalytics.avgScores).some(Boolean) ? (
+                    <div className="panel-card" style={{ marginBottom: 16 }}>
+                      <h3 style={{ margin: "0 0 12px", fontSize: "0.9rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Average ACT Scaled Scores</h3>
+                      {[["english","English"],["math","Math"],["reading","Reading"],["science","Science"]].map(([key, label]) => {
+                        const avg = educatorAnalytics.avgScores[key];
+                        return (
+                          <div key={key} className="section-score-row">
+                            <span>{label}</span>
+                            <strong>{avg != null ? avg : "No data yet"}</strong>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <p className="helper-text">No scored results yet. Scores appear once students submit tests with an answer key.</p>
+                  )}
+
+                  {educatorAnalytics.scansPerWeek?.length > 0 ? (
+                    <div className="panel-card">
+                      <h3 style={{ margin: "0 0 12px", fontSize: "0.9rem", color: "var(--muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>Scans per Week</h3>
+                      {educatorAnalytics.scansPerWeek.map((w) => (
+                        <div key={w.week} className="section-score-row">
+                          <span>{w.week}</span>
+                          <strong>{w.count}</strong>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </>
+              ) : (
+                <p className="helper-text">No analytics data yet.</p>
+              )
+            ) : null}
           </section>
         ) : null}
 

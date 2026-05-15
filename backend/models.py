@@ -31,6 +31,7 @@ class ScanResult(Base):
     test_id: Mapped[str | None] = mapped_column(String(50), nullable=True)
     test_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
     results_json: Mapped[str] = mapped_column(Text, nullable=False)
+    scores_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="scan")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_utcnow)
 

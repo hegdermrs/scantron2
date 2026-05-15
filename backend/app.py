@@ -144,6 +144,14 @@ def ensure_data_store():
 ensure_data_store()
 Base.metadata.create_all(bind=engine)
 
+# Add scores_json column if upgrading from Phase 2
+with engine.connect() as _conn:
+    from sqlalchemy import inspect as _inspect, text as _text
+    _cols = {c["name"] for c in _inspect(_conn).get_columns("scan_results")}
+    if "scores_json" not in _cols:
+        _conn.execute(_text("ALTER TABLE scan_results ADD COLUMN scores_json TEXT"))
+        _conn.commit()
+
 
 def get_connection():
     connection = sqlite3.connect(DB_PATH)
@@ -1632,11 +1640,13 @@ def save_result(
     results = body.get("results")
     if not results:
         raise HTTPException(status_code=400, detail="results required")
+    scores = body.get("scores")
     scan = ScanResult(
         user_id=user.id,
-        test_id=body.get("testId"),
+        test_id=str(body["testId"]) if body.get("testId") else None,
         test_name=body.get("testName"),
         results_json=json.dumps(results),
+        scores_json=json.dumps(scores) if scores else None,
         source=body.get("source", "manual"),
     )
     db.add(scan)
@@ -1741,11 +1751,111 @@ def my_results(user: User = Depends(require_user), db: Session = Depends(get_db)
                 "testId": r.test_id,
                 "testName": r.test_name,
                 "results": json.loads(r.results_json),
+                "scores": json.loads(r.scores_json) if r.scores_json else None,
                 "source": r.source,
                 "createdAt": r.created_at.isoformat(),
             }
             for r in rows
         ]
+    }
+
+
+@app.post("/me/email-results")
+async def email_results(
+    body: dict = Body(...),
+    user: User = Depends(require_user),
+):
+    import os
+    from .pdf_report import build_pdf
+
+    test_name = body.get("testName") or "ACT Practice Test"
+    answers = body.get("answers") or {}
+    scores = body.get("scores")
+    created_at = body.get("createdAt") or utc_now_iso()[:10]
+
+    pdf_bytes = build_pdf(
+        username=user.username,
+        email=user.email,
+        test_name=test_name,
+        answers=answers,
+        scores=scores,
+        created_at=created_at,
+    )
+
+    subject = f"Your Prepmedians Score Report — {test_name}"
+    html_body = f"""
+    <p>Hi {user.username},</p>
+    <p>Your score report for <strong>{test_name}</strong> is attached as a PDF.</p>
+    <p>Log back in anytime at <a href="https://grader.prepmedians.com">grader.prepmedians.com</a> to see your full history and study plan.</p>
+    <p>— The Prepmedians Team</p>
+    """
+
+    api_key = os.getenv("RESEND_API_KEY", "")
+    if api_key:
+        try:
+            import resend as resend_sdk
+            resend_sdk.api_key = api_key
+            import base64 as _b64
+            resend_sdk.Emails.send({
+                "from": "Prepmedians <noreply@prepmedians.com>",
+                "to": [user.email],
+                "subject": subject,
+                "html": html_body,
+                "attachments": [
+                    {
+                        "filename": f"score-report-{created_at}.pdf",
+                        "content": list(_b64.b64encode(pdf_bytes)),
+                    }
+                ],
+            })
+        except Exception as exc:
+            raise HTTPException(status_code=502, detail=f"Email send failed: {exc}") from exc
+    else:
+        print(f"[email-results] RESEND_API_KEY not set — would email {user.email}: {subject}")
+
+    return {"ok": True, "emailedTo": user.email}
+
+
+@app.get("/admin/analytics")
+def admin_analytics(_: User = Depends(require_educator), db: Session = Depends(get_db)):
+    from sqlalchemy import func
+
+    total_students = db.query(func.count(User.id)).scalar()
+    total_scans = db.query(func.count(ScanResult.id)).scalar()
+
+    # Average scaled scores across all results that have scores_json
+    scored_rows = db.query(ScanResult.scores_json).filter(ScanResult.scores_json.isnot(None)).all()
+    section_totals: dict[str, list[int]] = {k: [] for k in ("english", "math", "reading", "science")}
+    for (scores_json_str,) in scored_rows:
+        try:
+            s = json.loads(scores_json_str)
+            for key in section_totals:
+                val = s.get(key, {})
+                scale = val.get("scaleScore") if isinstance(val, dict) else None
+                if isinstance(scale, (int, float)):
+                    section_totals[key].append(int(scale))
+        except Exception:
+            continue
+
+    avg_scores = {
+        k: round(sum(v) / len(v), 1) if v else None
+        for k, v in section_totals.items()
+    }
+
+    # Scans per week for the last 8 weeks (using created_at)
+    from sqlalchemy import text as _text2
+    weekly = db.execute(
+        _text2(
+            "SELECT strftime('%Y-W%W', created_at) as week, COUNT(*) as cnt "
+            "FROM scan_results GROUP BY week ORDER BY week DESC LIMIT 8"
+        )
+    ).fetchall()
+
+    return {
+        "totalStudents": total_students,
+        "totalScans": total_scans,
+        "avgScores": avg_scores,
+        "scansPerWeek": [{"week": r[0], "count": r[1]} for r in reversed(weekly)],
     }
 
 
@@ -1983,8 +2093,6 @@ async def parse_omr_route(
     file: UploadFile = File(...),
     testId: str | None = Form(default=None),
     testName: str | None = Form(default=None),
-    current_user: User | None = Depends(get_current_user),
-    db: Session = Depends(get_db),
 ):
     file_bytes = await file.read()
     if not file_bytes:
@@ -2038,20 +2146,6 @@ async def parse_omr_route(
                     + (f" Preview: {body_preview}" if body_preview else "")
                 ),
             ) from exc
-
-        if current_user is not None:
-            try:
-                scan = ScanResult(
-                    user_id=current_user.id,
-                    test_id=testId,
-                    test_name=testName,
-                    results_json=json.dumps(payload),
-                    source="scan",
-                )
-                db.add(scan)
-                db.commit()
-            except Exception:
-                db.rollback()
 
         return payload
 
