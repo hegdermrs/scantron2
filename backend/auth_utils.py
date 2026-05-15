@@ -6,8 +6,8 @@ import jwt
 from fastapi import Cookie, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from .database import get_db
-from .models import User
+from database import get_db
+from models import User
 
 JWT_SECRET = os.getenv("JWT_SECRET", "change-me-in-production-use-a-long-random-string")
 JWT_ALGORITHM = "HS256"

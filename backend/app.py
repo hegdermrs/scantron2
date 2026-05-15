@@ -17,7 +17,7 @@ from fastapi.responses import Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from sqlalchemy.orm import Session
 
-from .auth_utils import (
+from auth_utils import (
     COOKIE_NAME,
     create_jwt,
     get_current_user,
@@ -26,8 +26,8 @@ from .auth_utils import (
     require_user,
     verify_password,
 )
-from .database import Base, engine, get_db
-from .models import ScanResult, User
+from database import Base, engine, get_db
+from models import ScanResult, User
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 try:
@@ -1766,7 +1766,7 @@ async def email_results(
     user: User = Depends(require_user),
 ):
     import os
-    from .pdf_report import build_pdf
+    from pdf_report import build_pdf
 
     test_name = body.get("testName") or "ACT Practice Test"
     answers = body.get("answers") or {}
