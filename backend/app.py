@@ -11,10 +11,23 @@ from pathlib import Path
 import cv2
 import httpx
 import numpy as np
-from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Body, Depends, FastAPI, File, Form, HTTPException, Query, Request, Response as FResponse, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
+from sqlalchemy.orm import Session
+
+from .auth_utils import (
+    COOKIE_NAME,
+    create_jwt,
+    get_current_user,
+    hash_password,
+    require_educator,
+    require_user,
+    verify_password,
+)
+from .database import Base, engine, get_db
+from .models import ScanResult, User
 from PIL import Image, ImageOps, UnidentifiedImageError
 
 try:
@@ -129,6 +142,7 @@ def ensure_data_store():
 
 
 ensure_data_store()
+Base.metadata.create_all(bind=engine)
 
 
 def get_connection():
@@ -1609,6 +1623,28 @@ def health():
     return {"status": "ok", "tests": len(list_tests(include_answer_keys=False))}
 
 
+@app.post("/me/results")
+def save_result(
+    body: dict = Body(...),
+    user: User = Depends(require_user),
+    db: Session = Depends(get_db),
+):
+    results = body.get("results")
+    if not results:
+        raise HTTPException(status_code=400, detail="results required")
+    scan = ScanResult(
+        user_id=user.id,
+        test_id=body.get("testId"),
+        test_name=body.get("testName"),
+        results_json=json.dumps(results),
+        source=body.get("source", "manual"),
+    )
+    db.add(scan)
+    db.commit()
+    db.refresh(scan)
+    return {"id": scan.id, "createdAt": scan.created_at.isoformat()}
+
+
 @app.post("/feedback")
 def submit_feedback(payload: dict = Body(...)):
     allowed_keys = {
@@ -1630,6 +1666,154 @@ def submit_feedback(payload: dict = Body(...)):
         fh.write(json.dumps(cleaned, ensure_ascii=False) + "\n")
 
     return {"ok": True}
+
+
+@app.post("/auth/register")
+def auth_register(body: dict = Body(...), db: Session = Depends(get_db)):
+    username = (body.get("username") or "").strip()
+    email = (body.get("email") or "").strip().lower()
+    password = body.get("password") or ""
+
+    if not username or not email or not password:
+        raise HTTPException(status_code=400, detail="username, email, and password are required")
+    if len(username) < 2 or len(username) > 50:
+        raise HTTPException(status_code=400, detail="Username must be 2–50 characters")
+    if len(password) < 6:
+        raise HTTPException(status_code=400, detail="Password must be at least 6 characters")
+    if db.query(User).filter(User.username == username).first():
+        raise HTTPException(status_code=409, detail="Username already taken")
+    if db.query(User).filter(User.email == email).first():
+        raise HTTPException(status_code=409, detail="Email already registered")
+
+    user = User(username=username, email=email, hashed_password=hash_password(password))
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+
+    token = create_jwt(user.id, user.username, user.role)
+    response = FResponse(content=json.dumps({"id": user.id, "username": user.username, "email": user.email, "role": user.role}), media_type="application/json", status_code=201)
+    response.set_cookie(COOKIE_NAME, token, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30, secure=True)
+    return response
+
+
+@app.post("/auth/login")
+def auth_login(body: dict = Body(...), db: Session = Depends(get_db)):
+    username = (body.get("username") or "").strip()
+    password = body.get("password") or ""
+
+    user = db.query(User).filter(User.username == username).first()
+    if not user or not verify_password(password, user.hashed_password):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+
+    token = create_jwt(user.id, user.username, user.role)
+    response = FResponse(content=json.dumps({"id": user.id, "username": user.username, "email": user.email, "role": user.role}), media_type="application/json")
+    response.set_cookie(COOKIE_NAME, token, httponly=True, samesite="lax", max_age=60 * 60 * 24 * 30, secure=True)
+    return response
+
+
+@app.post("/auth/logout")
+def auth_logout():
+    response = FResponse(content=json.dumps({"ok": True}), media_type="application/json")
+    response.delete_cookie(COOKIE_NAME)
+    return response
+
+
+@app.get("/auth/me")
+def auth_me(user: User | None = Depends(get_current_user)):
+    if user is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return {"id": user.id, "username": user.username, "email": user.email, "role": user.role}
+
+
+@app.get("/me/results")
+def my_results(user: User = Depends(require_user), db: Session = Depends(get_db)):
+    rows = (
+        db.query(ScanResult)
+        .filter(ScanResult.user_id == user.id)
+        .order_by(ScanResult.created_at.desc())
+        .limit(50)
+        .all()
+    )
+    return {
+        "results": [
+            {
+                "id": r.id,
+                "testId": r.test_id,
+                "testName": r.test_name,
+                "results": json.loads(r.results_json),
+                "source": r.source,
+                "createdAt": r.created_at.isoformat(),
+            }
+            for r in rows
+        ]
+    }
+
+
+@app.get("/admin/users")
+def admin_users(_: User = Depends(require_educator), db: Session = Depends(get_db)):
+    users = db.query(User).order_by(User.created_at.desc()).all()
+    result = []
+    for u in users:
+        latest = (
+            db.query(ScanResult)
+            .filter(ScanResult.user_id == u.id)
+            .order_by(ScanResult.created_at.desc())
+            .first()
+        )
+        result.append({
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "role": u.role,
+            "createdAt": u.created_at.isoformat(),
+            "lastScan": latest.created_at.isoformat() if latest else None,
+            "scanCount": db.query(ScanResult).filter(ScanResult.user_id == u.id).count(),
+        })
+    return {"users": result}
+
+
+@app.get("/admin/results")
+def admin_results(_: User = Depends(require_educator), db: Session = Depends(get_db)):
+    rows = (
+        db.query(ScanResult, User.username, User.email)
+        .join(User, ScanResult.user_id == User.id)
+        .order_by(ScanResult.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    return {
+        "results": [
+            {
+                "id": r.id,
+                "username": username,
+                "email": email,
+                "testId": r.test_id,
+                "testName": r.test_name,
+                "results": json.loads(r.results_json),
+                "source": r.source,
+                "createdAt": r.created_at.isoformat(),
+            }
+            for r, username, email in rows
+        ]
+    }
+
+
+@app.post("/admin/users/{user_id}/role")
+def set_user_role(
+    user_id: int,
+    body: dict = Body(...),
+    _: User = Depends(require_educator),
+    db: Session = Depends(get_db),
+):
+    role = body.get("role")
+    if role not in ("student", "educator"):
+        raise HTTPException(status_code=400, detail="role must be 'student' or 'educator'")
+    user = db.get(User, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    user.role = role
+    db.commit()
+    return {"id": user.id, "username": user.username, "role": user.role}
 
 
 @app.get("/tests")
@@ -1799,6 +1983,8 @@ async def parse_omr_route(
     file: UploadFile = File(...),
     testId: str | None = Form(default=None),
     testName: str | None = Form(default=None),
+    current_user: User | None = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     file_bytes = await file.read()
     if not file_bytes:
@@ -1842,7 +2028,7 @@ async def parse_omr_route(
 
     if "application/json" in content_type:
         try:
-            return response.json()
+            payload = response.json()
         except ValueError as exc:
             body_preview = response.text[:300].strip()
             raise HTTPException(
@@ -1852,6 +2038,22 @@ async def parse_omr_route(
                     + (f" Preview: {body_preview}" if body_preview else "")
                 ),
             ) from exc
+
+        if current_user is not None:
+            try:
+                scan = ScanResult(
+                    user_id=current_user.id,
+                    test_id=testId,
+                    test_name=testName,
+                    results_json=json.dumps(payload),
+                    source="scan",
+                )
+                db.add(scan)
+                db.commit()
+            except Exception:
+                db.rollback()
+
+        return payload
 
     raise HTTPException(
         status_code=502,

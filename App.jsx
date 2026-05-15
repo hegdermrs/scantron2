@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   matchesPracticeTest1,
@@ -14,6 +14,15 @@ const TESTS_ENDPOINT = `${BACKEND_BASE_URL}/tests`;
 const ADMIN_TESTS_ENDPOINT = `${BACKEND_BASE_URL}/admin/tests`;
 const ADMIN_IMPORT_ENDPOINT = `${BACKEND_BASE_URL}/admin/tests/import-pdf`;
 const FEEDBACK_ENDPOINT = `${BACKEND_BASE_URL}/feedback`;
+const AUTH_REGISTER_ENDPOINT = `${BACKEND_BASE_URL}/auth/register`;
+const AUTH_LOGIN_ENDPOINT = `${BACKEND_BASE_URL}/auth/login`;
+const AUTH_LOGOUT_ENDPOINT = `${BACKEND_BASE_URL}/auth/logout`;
+const AUTH_ME_ENDPOINT = `${BACKEND_BASE_URL}/auth/me`;
+const MY_RESULTS_ENDPOINT = `${BACKEND_BASE_URL}/me/results`;
+const SAVE_RESULT_ENDPOINT = `${BACKEND_BASE_URL}/me/results`;
+const ADMIN_USERS_ENDPOINT = `${BACKEND_BASE_URL}/admin/users`;
+const ADMIN_ALL_RESULTS_ENDPOINT = `${BACKEND_BASE_URL}/admin/results`;
+const SET_USER_ROLE_ENDPOINT = (id) => `${BACKEND_BASE_URL}/admin/users/${id}/role`;
 
 const LETTER_TO_NUMERIC = { A: 1, B: 2, C: 3, D: 4, F: 1, G: 2, H: 3, J: 4 };
 
@@ -1122,6 +1131,214 @@ const styles = `
     color: var(--text);
   }
 
+  /* ─── Auth modal ─────────────────────────────────── */
+  .auth-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(10, 30, 26, 0.55);
+    backdrop-filter: blur(3px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+    padding: 20px;
+  }
+
+  .auth-modal {
+    background: #fff;
+    border-radius: 24px;
+    padding: 32px;
+    width: 100%;
+    max-width: 420px;
+    display: grid;
+    gap: 20px;
+    box-shadow: 0 24px 64px rgba(10, 30, 26, 0.22);
+  }
+
+  .auth-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid rgba(59, 48, 36, 0.1);
+    padding-bottom: 0;
+  }
+
+  .auth-tab {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 8px 18px;
+    font-weight: 700;
+    font-size: 0.95rem;
+    cursor: pointer;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .auth-tab.active {
+    color: var(--accent, #1f6f5f);
+    border-bottom-color: var(--accent, #1f6f5f);
+  }
+
+  .auth-form {
+    display: grid;
+    gap: 14px;
+  }
+
+  .auth-close {
+    appearance: none;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    font-size: 1.3rem;
+    color: var(--muted);
+    justify-self: end;
+    line-height: 1;
+    padding: 2px 6px;
+  }
+
+  /* ─── User chip in header ──────────────────────────── */
+  .user-chip {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .user-avatar {
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--accent, #1f6f5f);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 0.9rem;
+    flex-shrink: 0;
+  }
+
+  .user-name {
+    font-weight: 700;
+    font-size: 0.9rem;
+    color: var(--text);
+  }
+
+  .user-role-badge {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  /* ─── History panel ───────────────────────────────── */
+  .history-panel {
+    display: grid;
+    gap: 12px;
+  }
+
+  .history-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 14px;
+    background: rgba(255, 255, 255, 0.85);
+    border: 1px solid rgba(59, 48, 36, 0.08);
+  }
+
+  .history-meta {
+    display: grid;
+    gap: 2px;
+  }
+
+  .history-test {
+    font-weight: 700;
+    font-size: 0.9rem;
+  }
+
+  .history-date {
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+
+  .history-source {
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    background: rgba(59, 48, 36, 0.07);
+    padding: 3px 8px;
+    border-radius: 999px;
+  }
+
+  /* ─── Educator table ──────────────────────────────── */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.875rem;
+  }
+
+  .data-table th {
+    text-align: left;
+    padding: 8px 12px;
+    color: var(--muted);
+    font-weight: 700;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    border-bottom: 2px solid rgba(59, 48, 36, 0.1);
+  }
+
+  .data-table td {
+    padding: 10px 12px;
+    border-bottom: 1px solid rgba(59, 48, 36, 0.07);
+    vertical-align: top;
+  }
+
+  .data-table tr:last-child td {
+    border-bottom: none;
+  }
+
+  .role-select {
+    font-size: 0.8rem;
+    border: 1px solid rgba(59, 48, 36, 0.18);
+    border-radius: 6px;
+    padding: 3px 6px;
+    background: #fff;
+    cursor: pointer;
+  }
+
+  .educator-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 2px solid rgba(59, 48, 36, 0.1);
+    margin-bottom: 20px;
+  }
+
+  .educator-tab {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 8px 18px;
+    font-weight: 700;
+    font-size: 0.9rem;
+    cursor: pointer;
+    color: var(--muted);
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    transition: color 0.15s, border-color 0.15s;
+  }
+
+  .educator-tab.active {
+    color: var(--accent, #1f6f5f);
+    border-bottom-color: var(--accent, #1f6f5f);
+  }
+
   .score-report-head {
     display: grid;
     grid-template-columns: 1fr;
@@ -1900,6 +2117,25 @@ export default function App() {
   const [resultsSource, setResultsSource] = useState(null);
   const [flaggedAnswers, setFlaggedAnswers] = useState(() => new Set());
 
+  // Auth
+  const [currentUser, setCurrentUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [authTab, setAuthTab] = useState("login"); // "login" | "register"
+  const [authForm, setAuthForm] = useState({ username: "", email: "", password: "" });
+  const [authError, setAuthError] = useState("");
+  const [authSubmitting, setAuthSubmitting] = useState(false);
+
+  // Student history
+  const [myResults, setMyResults] = useState(null);
+  const [myResultsLoading, setMyResultsLoading] = useState(false);
+
+  // Educator view
+  const [educatorTab, setEducatorTab] = useState("users"); // "users" | "results"
+  const [educatorUsers, setEducatorUsers] = useState(null);
+  const [educatorResults, setEducatorResults] = useState(null);
+  const [educatorLoading, setEducatorLoading] = useState(false);
+
   const selectedTest = useMemo(
     () =>
       availableTests.find((test) => String(test.id) === String(selectedTestId)) ||
@@ -1972,6 +2208,136 @@ export default function App() {
       }),
     [practiceTest1ScoringState.scores, resultReadSummary.isLowConfidence, results]
   );
+
+  // ─── Auth handlers ─────────────────────────────────────
+  useEffect(() => {
+    fetch(AUTH_ME_ENDPOINT, { credentials: "include" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((user) => setCurrentUser(user || null))
+      .catch(() => setCurrentUser(null))
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  const openAuthModal = (tab = "login") => {
+    setAuthTab(tab);
+    setAuthForm({ username: "", email: "", password: "" });
+    setAuthError("");
+    setIsAuthModalOpen(true);
+  };
+
+  const handleAuthFormChange = (field, value) => {
+    setAuthForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleAuthSubmit = async (event) => {
+    event.preventDefault();
+    setAuthError("");
+    setAuthSubmitting(true);
+    const url = authTab === "login" ? AUTH_LOGIN_ENDPOINT : AUTH_REGISTER_ENDPOINT;
+    const body = authTab === "login"
+      ? { username: authForm.username, password: authForm.password }
+      : { username: authForm.username, email: authForm.email, password: authForm.password };
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        setAuthError(data.detail || "Something went wrong. Please try again.");
+        return;
+      }
+      setCurrentUser(data);
+      setIsAuthModalOpen(false);
+    } catch {
+      setAuthError("Could not reach the server. Check your connection.");
+    } finally {
+      setAuthSubmitting(false);
+    }
+  };
+
+  const handleUserLogout = async () => {
+    await fetch(AUTH_LOGOUT_ENDPOINT, { method: "POST", credentials: "include" }).catch(() => {});
+    setCurrentUser(null);
+    setMyResults(null);
+    setEducatorUsers(null);
+    setEducatorResults(null);
+  };
+
+  // ─── Student history ───────────────────────────────────
+  const loadMyResults = useCallback(async () => {
+    if (!currentUser) return;
+    setMyResultsLoading(true);
+    try {
+      const response = await fetch(MY_RESULTS_ENDPOINT, { credentials: "include" });
+      if (response.ok) {
+        const data = await response.json();
+        setMyResults(data.results || []);
+      }
+    } catch {
+      /* silent */
+    } finally {
+      setMyResultsLoading(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser && currentUser.role === "student") {
+      loadMyResults();
+    }
+  }, [currentUser, loadMyResults]);
+
+  // Save manual results to server when logged in
+  useEffect(() => {
+    if (!currentUser || resultsSource !== "manual" || !results) return;
+    fetch(SAVE_RESULT_ENDPOINT, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        results,
+        testId: selectedTest?.id ?? null,
+        testName: selectedTest?.name ?? null,
+        source: "manual",
+      }),
+    })
+      .then((r) => r.ok && loadMyResults())
+      .catch(() => {});
+  }, [results, resultsSource]);
+
+  // ─── Educator data ─────────────────────────────────────
+  const loadEducatorData = useCallback(async () => {
+    if (!currentUser || currentUser.role !== "educator") return;
+    setEducatorLoading(true);
+    try {
+      const [usersRes, resultsRes] = await Promise.all([
+        fetch(ADMIN_USERS_ENDPOINT, { credentials: "include" }),
+        fetch(ADMIN_ALL_RESULTS_ENDPOINT, { credentials: "include" }),
+      ]);
+      if (usersRes.ok) setEducatorUsers((await usersRes.json()).users || []);
+      if (resultsRes.ok) setEducatorResults((await resultsRes.json()).results || []);
+    } catch {
+      /* silent */
+    } finally {
+      setEducatorLoading(false);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (currentUser?.role === "educator") loadEducatorData();
+  }, [currentUser, loadEducatorData]);
+
+  const handleSetUserRole = async (userId, role) => {
+    await fetch(SET_USER_ROLE_ENDPOINT(userId), {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    }).catch(() => {});
+    loadEducatorData();
+  };
 
   const loadPublicTests = async () => {
     setTestsLoading(true);
@@ -2139,6 +2505,7 @@ export default function App() {
     setResultsSource(null);
     setFlaggedAnswers(new Set());
     window.setTimeout(handleBackToUpload, 80);
+    if (currentUser?.role === "student") loadMyResults();
   };
 
   const parseManualSection = (text, total) => {
@@ -2466,47 +2833,101 @@ export default function App() {
           </div>
 
           <div className="header-actions">
-            {isAdminAuthenticated ? (
+            {currentUser ? (
               <>
-                <div className="educator-profile">
-                  <div className="profile-avatar" aria-hidden="true">
-                    {adminCredentials.username.slice(0, 1).toUpperCase() || "E"}
+                <div className="user-chip">
+                  <div className="user-avatar" aria-hidden="true">
+                    {currentUser.username.slice(0, 1).toUpperCase()}
                   </div>
                   <div>
-                    <p className="profile-name">{adminCredentials.username}</p>
-                    <p className="profile-role">Educator</p>
+                    <p className="user-name">{currentUser.username}</p>
+                    <p className="user-role-badge">{currentUser.role}</p>
                   </div>
                 </div>
+                {currentUser.role === "educator" && (
+                  <button
+                    type="button"
+                    className="quiet-button"
+                    onClick={() => setIsAdminOpen((c) => !c)}
+                  >
+                    {isAdminOpen ? "Close Setup" : "Test Setup"}
+                  </button>
+                )}
                 <button
                   type="button"
                   className="quiet-button"
-                  onClick={() => setIsAdminOpen((current) => !current)}
+                  onClick={handleUserLogout}
                 >
-                  {isAdminOpen ? "Close Setup" : "Test Setup"}
-                </button>
-                <button
-                  type="button"
-                  className="quiet-button"
-                  onClick={handleAdminLogout}
-                >
-                  Logout
+                  Sign Out
                 </button>
               </>
-            ) : (
+            ) : authLoading ? null : (
+              <>
+                <button
+                  type="button"
+                  className="quiet-button"
+                  onClick={() => openAuthModal("login")}
+                >
+                  Sign In
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  style={{ padding: "8px 18px", fontSize: "0.875rem" }}
+                  onClick={() => openAuthModal("register")}
+                >
+                  Create Account
+                </button>
+              </>
+            )}
+            {!currentUser && !authLoading && (
               <button
                 type="button"
                 className="quiet-button"
+                style={{ marginLeft: 8, fontSize: "0.8rem" }}
                 onClick={() => {
                   setAdminError("");
                   setAdminSuccess("");
                   setIsLoginModalOpen(true);
                 }}
               >
-                Educator Login
+                Admin
               </button>
             )}
           </div>
         </header>
+
+        {isAuthModalOpen ? (
+          <div className="auth-backdrop" role="dialog" aria-modal="true" onClick={(e) => { if (e.target === e.currentTarget) setIsAuthModalOpen(false); }}>
+            <div className="auth-modal">
+              <button className="auth-close" aria-label="Close" onClick={() => setIsAuthModalOpen(false)}>×</button>
+              <div className="auth-tabs">
+                <button className={`auth-tab ${authTab === "login" ? "active" : ""}`} onClick={() => { setAuthTab("login"); setAuthError(""); }}>Sign in</button>
+                <button className={`auth-tab ${authTab === "register" ? "active" : ""}`} onClick={() => { setAuthTab("register"); setAuthError(""); }}>Create account</button>
+              </div>
+              <form className="auth-form" onSubmit={handleAuthSubmit}>
+                <div className="field">
+                  <label htmlFor="auth-username">Username</label>
+                  <input id="auth-username" className="text-input" type="text" autoComplete="username" value={authForm.username} onChange={(e) => handleAuthFormChange("username", e.target.value)} required />
+                </div>
+                {authTab === "register" && (
+                  <div className="field">
+                    <label htmlFor="auth-email">Email</label>
+                    <input id="auth-email" className="text-input" type="email" autoComplete="email" value={authForm.email} onChange={(e) => handleAuthFormChange("email", e.target.value)} required />
+                  </div>
+                )}
+                <div className="field">
+                  <label htmlFor="auth-password">Password</label>
+                  <input id="auth-password" className="text-input" type="password" autoComplete={authTab === "login" ? "current-password" : "new-password"} value={authForm.password} onChange={(e) => handleAuthFormChange("password", e.target.value)} required minLength={6} />
+                </div>
+                {authError ? <div className="message error">{authError}</div> : null}
+                <button type="submit" className="primary-button" disabled={authSubmitting}>
+                  {authSubmitting ? "Please wait…" : authTab === "login" ? "Sign in" : "Create account"}
+                </button>
+              </form>
+            </div>
+          </div>
+        ) : null}
 
         {(isLoading || isSavingTest) ? (
           <div className="loading-backdrop" role="dialog" aria-modal="true">
@@ -3260,6 +3681,109 @@ export default function App() {
               </section>
             ) : null}
           </>
+        ) : null}
+
+        {currentUser?.role === "student" && (myResults?.length > 0 || myResultsLoading) ? (
+          <section className="panel-card stack">
+            <div className="panel-head">
+              <div>
+                <h2 className="panel-title">My Results</h2>
+                <p className="panel-subtitle">Your past test attempts</p>
+              </div>
+              <button type="button" className="quiet-button" onClick={loadMyResults}>Refresh</button>
+            </div>
+            {myResultsLoading ? (
+              <p className="helper-text">Loading…</p>
+            ) : (
+              <div className="history-panel">
+                {(myResults || []).map((r) => (
+                  <div key={r.id} className="history-row">
+                    <div className="history-meta">
+                      <div className="history-test">{r.testName || "Unknown test"}</div>
+                      <div className="history-date">{new Date(r.createdAt).toLocaleString()}</div>
+                    </div>
+                    <span className="history-source">{r.source}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        ) : null}
+
+        {currentUser?.role === "educator" ? (
+          <section className="panel-card stack">
+            <div className="panel-head">
+              <div>
+                <h2 className="panel-title">Educator Dashboard</h2>
+                <p className="panel-subtitle">Students and their results</p>
+              </div>
+              <button type="button" className="quiet-button" onClick={loadEducatorData}>Refresh</button>
+            </div>
+            <div className="educator-tabs">
+              <button className={`educator-tab ${educatorTab === "users" ? "active" : ""}`} onClick={() => setEducatorTab("users")}>Students</button>
+              <button className={`educator-tab ${educatorTab === "results" ? "active" : ""}`} onClick={() => setEducatorTab("results")}>All Results</button>
+            </div>
+            {educatorLoading ? (
+              <p className="helper-text">Loading…</p>
+            ) : educatorTab === "users" ? (
+              <div style={{ overflowX: "auto" }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Username</th>
+                      <th>Email</th>
+                      <th>Scans</th>
+                      <th>Last scan</th>
+                      <th>Role</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(educatorUsers || []).map((u) => (
+                      <tr key={u.id}>
+                        <td>{u.username}</td>
+                        <td>{u.email}</td>
+                        <td>{u.scanCount}</td>
+                        <td>{u.lastScan ? new Date(u.lastScan).toLocaleDateString() : "—"}</td>
+                        <td>
+                          <select
+                            className="role-select"
+                            value={u.role}
+                            onChange={(e) => handleSetUserRole(u.id, e.target.value)}
+                          >
+                            <option value="student">student</option>
+                            <option value="educator">educator</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <div style={{ overflowX: "auto" }}>
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Student</th>
+                      <th>Test</th>
+                      <th>Source</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(educatorResults || []).map((r) => (
+                      <tr key={r.id}>
+                        <td>{r.username}</td>
+                        <td>{r.testName || "—"}</td>
+                        <td>{r.source}</td>
+                        <td>{new Date(r.createdAt).toLocaleDateString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </section>
         ) : null}
 
         {apiPreview && isAdminOpen && isAdminAuthenticated ? (
