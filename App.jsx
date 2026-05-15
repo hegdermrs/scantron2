@@ -901,6 +901,41 @@ const styles = `
     outline-offset: 2px;
   }
 
+  .answer-card.edited {
+    border-color: rgba(99, 102, 241, 0.5);
+  }
+
+  .answer-card.editing {
+    border-color: rgba(31, 111, 95, 0.6);
+    box-shadow: 0 0 0 3px rgba(31, 111, 95, 0.15);
+  }
+
+  .answer-edit-input {
+    width: 28px;
+    height: 28px;
+    text-align: center;
+    font-size: 1.1rem;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    border: none;
+    background: transparent;
+    outline: none;
+    padding: 0;
+    color: inherit;
+    caret-color: var(--accent, #1f6f5f);
+  }
+
+  .answer-edited-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgba(99, 102, 241, 0.7);
+    flex-shrink: 0;
+    align-self: flex-start;
+    margin-top: 2px;
+  }
+
   .answer-card-body {
     display: flex;
     align-items: center;
@@ -2187,6 +2222,8 @@ export default function App() {
   );
   const [resultsSource, setResultsSource] = useState(null);
   const [flaggedAnswers, setFlaggedAnswers] = useState(() => new Set());
+  const [editingCell, setEditingCell] = useState(null); // {section, questionNumber}
+  const [editedCells, setEditedCells] = useState(() => new Set());
 
   // Auth
   const [currentUser, setCurrentUser] = useState(null);
@@ -2609,6 +2646,8 @@ export default function App() {
     setFileInputResetKey((current) => current + 1);
     setResultsSource(null);
     setFlaggedAnswers(new Set());
+    setEditingCell(null);
+    setEditedCells(new Set());
     setEmailStatus("");
     window.setTimeout(handleBackToUpload, 80);
     if (currentUser?.role === "student") loadMyResults();
@@ -2708,6 +2747,28 @@ export default function App() {
           /* fire-and-forget; ignore network errors */
         });
       }
+      return next;
+    });
+  };
+
+  const handleEditCommit = (sectionKey, questionNumber, rawInput) => {
+    setEditingCell(null);
+    const letter = String(rawInput || "").trim().toUpperCase().slice(0, 1);
+    const numeric = LETTER_TO_NUMERIC[letter] ?? null;
+    const index = questionNumber - 1;
+    setResults((prev) => {
+      if (!prev) return prev;
+      const sectionAnswers = Array.isArray(prev[sectionKey])
+        ? [...prev[sectionKey]]
+        : [];
+      sectionAnswers[index] = numeric;
+      return { ...prev, [sectionKey]: sectionAnswers };
+    });
+    const cellKey = `${sectionKey}-${questionNumber}`;
+    setEditedCells((prev) => {
+      const next = new Set(prev);
+      if (numeric !== null) next.add(cellKey);
+      else next.delete(cellKey);
       return next;
     });
   };
@@ -3648,8 +3709,11 @@ export default function App() {
                           }
                           const flagKey = `${key}-${questionNumber}`;
                           const isFlagged = flaggedAnswers.has(flagKey);
-                          const canFlag =
-                            resultsSource === "scan" && !isBlank;
+                          const canFlag = resultsSource === "scan" && !isBlank;
+                          const isEditing =
+                            editingCell?.section === key &&
+                            editingCell?.questionNumber === questionNumber;
+                          const isEdited = editedCells.has(flagKey);
 
                           return (
                             <div
@@ -3658,16 +3722,44 @@ export default function App() {
                                 isBlank ? "blank" : "filled"
                               } ${correctnessClass} ${
                                 isFlagged ? "flagged" : ""
+                              } ${isEdited ? "edited" : ""} ${
+                                isEditing ? "editing" : ""
                               }`.trim()}
+                              style={{ cursor: isEditing ? "text" : "pointer" }}
+                              onClick={() => {
+                                if (!isEditing)
+                                  setEditingCell({ section: key, questionNumber });
+                              }}
+                              title={isEditing ? undefined : "Click to edit this answer"}
                             >
                               <div className="answer-question">
                                 Q{questionNumber}
+                                {isEdited ? <span className="answer-edited-dot" title="Manually edited" /> : null}
                               </div>
                               <div className="answer-card-body">
-                                <div className="answer-value">
-                                  {mappedAnswer}
-                                </div>
-                                {canFlag ? (
+                                {isEditing ? (
+                                  <input
+                                    className="answer-edit-input"
+                                    type="text"
+                                    maxLength={1}
+                                    defaultValue={isBlank ? "" : mappedAnswer}
+                                    autoFocus
+                                    onClick={(e) => e.stopPropagation()}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter" || e.key === "Tab") {
+                                        e.preventDefault();
+                                        handleEditCommit(key, questionNumber, e.target.value);
+                                      }
+                                      if (e.key === "Escape") setEditingCell(null);
+                                    }}
+                                    onBlur={(e) =>
+                                      handleEditCommit(key, questionNumber, e.target.value)
+                                    }
+                                  />
+                                ) : (
+                                  <div className="answer-value">{mappedAnswer}</div>
+                                )}
+                                {canFlag && !isEditing ? (
                                   <button
                                     type="button"
                                     className={`answer-flag-btn ${
@@ -3684,14 +3776,10 @@ export default function App() {
                                         ? "Reported as misread"
                                         : "Report this letter as misread"
                                     }
-                                    onClick={() =>
-                                      toggleFlag(
-                                        key,
-                                        questionNumber,
-                                        value,
-                                        mappedAnswer
-                                      )
-                                    }
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      toggleFlag(key, questionNumber, value, mappedAnswer);
+                                    }}
                                   >
                                     {"👎"}
                                   </button>
